@@ -213,14 +213,15 @@ class BoostingAug:
                                dataset: DatasetItem,
                                task='text_classification',
                                ):
-
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache=True)
 
-        Trainer(config=config,
-                dataset=dataset,  # train set and test set will be automatically detected
-                checkpoint_save_mode=0,  # =None to avoid save model
-                auto_device=self.device  # automatic choose CUDA or CPU
-                )
+        return Trainer(config=config,
+                       dataset=dataset,  # train set and test set will be automatically detected
+                       checkpoint_save_mode=0,  # =None to avoid save model
+                       auto_device=self.device  # automatic choose CUDA or CPU
+                       )
 
     def tc_classic_boost_training(self, config: APCConfigManager,
                                   dataset: DatasetItem,
@@ -228,6 +229,8 @@ class BoostingAug:
                                   task='text_classification',
                                   train_after_aug=False
                                   ):
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         _config = self.get_tc_config(config)
         if 'pretrained_bert' in _config.args:
             tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
@@ -273,18 +276,19 @@ class BoostingAug:
 
         if train_after_aug:
             print(colored('Start classic augment training...', 'cyan'))
-            Trainer(config=config,
-                    dataset=dataset,  # train set and test set will be automatically detected
-                    auto_device=self.device  # automatic choose CUDA or CPU
-                    ).load_trained_model()
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           ).load_trained_model()
 
-    def tc_cross_boost_training(self, config: APCConfigManager,
+    def tc_cross_boost_training(self, config: ClassificationConfigManager,
                                 dataset: DatasetItem,
                                 rewrite_cache=True,
                                 task='text_classification',
                                 train_after_aug=False
                                 ):
-
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         _config = self.get_tc_config(config)
         if 'pretrained_bert' in _config.args:
             tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
@@ -446,11 +450,11 @@ class BoostingAug:
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
-            Trainer(config=config,
-                    dataset=dataset,  # train set and test set will be automatically detected
-                    checkpoint_save_mode=0,  # =None to avoid save model
-                    auto_device=self.device  # automatic choose CUDA or CPU
-                    )
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=0,  # =None to avoid save model
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
     def tc_mono_boost_training(self, config: ClassificationConfigManager,
                                dataset: DatasetItem,
@@ -458,6 +462,8 @@ class BoostingAug:
                                task='text_classification',
                                train_after_aug=False
                                ):
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         _config = self.get_tc_config(config)
         if 'pretrained_bert' in _config.args:
             tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
@@ -568,24 +574,25 @@ class BoostingAug:
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
-            Trainer(config=config,
-                    dataset=dataset,  # train set and test set will be automatically detected
-                    checkpoint_save_mode=0,  # =None to avoid save model
-                    auto_device=self.device  # automatic choose CUDA or CPU
-                    )
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=0,  # =None to avoid save model
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
     def apc_boost_free_training(self, config: APCConfigManager,
                                 dataset: DatasetItem,
                                 task='apc',
                                 ):
-
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache=True)
 
-        Trainer(config=config,
-                dataset=dataset,  # train set and test set will be automatically detected
-                checkpoint_save_mode=0,  # =None to avoid save model
-                auto_device=self.device  # automatic choose CUDA or CPU
-                )
+        return Trainer(config=config,
+                       dataset=dataset,  # train set and test set will be automatically detected
+                       checkpoint_save_mode=0,  # =None to avoid save model
+                       auto_device=self.device  # automatic choose CUDA or CPU
+                       )
 
     def apc_classic_boost_training(self, config: APCConfigManager,
                                    dataset: DatasetItem,
@@ -593,6 +600,8 @@ class BoostingAug:
                                    rewrite_cache=True,
                                    train_after_aug=False
                                    ):
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         _config = self.get_apc_config(config)
         if 'pretrained_bert' in _config.args:
             tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
@@ -643,10 +652,10 @@ class BoostingAug:
 
         if train_after_aug:
             print(colored('Start classic augment training...', 'cyan'))
-            Trainer(config=config,
-                    dataset=dataset,  # train set and test set will be automatically detected
-                    auto_device=self.device  # automatic choose CUDA or CPU
-                    ).load_trained_model()
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           ).load_trained_model()
 
     def apc_cross_boost_training(self, config: APCConfigManager,
                                  dataset: DatasetItem,
@@ -654,6 +663,8 @@ class BoostingAug:
                                  task='apc',
                                  train_after_aug=False
                                  ):
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         _config = self.get_apc_config(config)
         if 'pretrained_bert' in _config.args:
             tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
@@ -842,11 +853,11 @@ class BoostingAug:
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
-            Trainer(config=config,
-                    dataset=dataset,  # train set and test set will be automatically detected
-                    checkpoint_save_mode=0,  # =None to avoid save model
-                    auto_device=self.device  # automatic choose CUDA or CPU
-                    )
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=0,  # =None to avoid save model
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
     def apc_mono_boost_training(self, config: APCConfigManager,
                                 dataset: DatasetItem,
@@ -854,6 +865,8 @@ class BoostingAug:
                                 task='apc',
                                 train_after_aug=False
                                 ):
+        if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
+            dataset = DatasetItem(dataset)
         _config = self.get_apc_config(config)
         if 'pretrained_bert' in _config.args:
             tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
@@ -967,11 +980,11 @@ class BoostingAug:
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
-            Trainer(config=config,
-                    dataset=dataset,  # train set and test set will be automatically detected
-                    checkpoint_save_mode=0,  # =None to avoid save model
-                    auto_device=self.device  # automatic choose CUDA or CPU
-                    )
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=0,  # =None to avoid save model
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
 
 def query_dataset_detail(dataset_name, task='text_classification'):
@@ -1012,13 +1025,16 @@ def post_clean(dataset_path):
 
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
-    download_datasets_from_github('..')
-    backup_datasets_dir = find_dir('../integrated_datasets', [dataset, task], disable_alert=True, recursive=True)
+    # download_datasets_from_github('..')
+    # backup_datasets_dir = find_dir('../integrated_datasets', [dataset, task], disable_alert=True, recursive=True)
+    #
+    # datasets_dir = find_dir('.', ['integrated_datasets', dataset, task], disable_alert=True)
+    # if not datasets_dir and backup_datasets_dir:
+    #     datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
+    #     os.makedirs(datasets_dir)
 
-    datasets_dir = find_dir('.', ['integrated_datasets', dataset, task], disable_alert=True)
-    if not datasets_dir:
-        datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
-        os.makedirs(datasets_dir)
+    download_datasets_from_github('.')
+    datasets_dir = 'integrated_datasets'
     if rewrite_cache:
         print('Remove temp files (if any)')
         for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
@@ -1031,11 +1047,11 @@ def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
 
         print('Remove Done')
 
-    for f in os.listdir(backup_datasets_dir):
-        if os.path.isfile(os.path.join(backup_datasets_dir, f)):
-            shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
-        if os.path.isdir(os.path.join(backup_datasets_dir, f)):
-            shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+    # for f in os.listdir(backup_datasets_dir):
+    #     if os.path.isfile(os.path.join(backup_datasets_dir, f)):
+    #         shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+    #     if os.path.isdir(os.path.join(backup_datasets_dir, f)):
+    #         shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
 
 
 filter_key_words = ['.py', '.ignore', '.md', 'readme', 'log', 'result', 'zip', '.state_dict', '.model', '.png', 'acc_', 'f1_', '.aug']
