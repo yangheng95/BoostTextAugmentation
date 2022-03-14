@@ -5,7 +5,7 @@
 # github: https://github.com/yangheng95
 # Copyright (C) 2021. All Rights Reserved.
 
-__version__ = '1.2.9'
+__version__ = '1.2.10'
 __name__ = 'boostaug'
 
 from boost_aug.boosting_aug_core import BoostingAug, AugmentBackend

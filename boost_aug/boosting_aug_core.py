@@ -1025,16 +1025,31 @@ def post_clean(dataset_path):
 
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
-    # download_datasets_from_github('..')
-    # backup_datasets_dir = find_dir('../integrated_datasets', [dataset, task], disable_alert=True, recursive=True)
+    # # download from remote ABSADatasets
+    # download_datasets_from_github('.')
+    # datasets_dir = 'integrated_datasets'
+    # if rewrite_cache:
+    #     print('Remove temp files (if any)')
+    #     for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
+    #         # for f in find_files(datasets_dir, ['.tmp']):
+    #         remove(f)
+    #     os.system('rm {}/valid.dat.tmp'.format(datasets_dir))
+    #     os.system('rm {}/train.dat.tmp'.format(datasets_dir))
+    #     if find_cwd_dir(['run', dataset]):
+    #         shutil.rmtree(find_cwd_dir(['run', dataset]))
     #
-    # datasets_dir = find_dir('.', ['integrated_datasets', dataset, task], disable_alert=True)
-    # if not datasets_dir and backup_datasets_dir:
-    #     datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
-    #     os.makedirs(datasets_dir)
+    #     print('Remove Done')
 
-    download_datasets_from_github('.')
-    datasets_dir = 'integrated_datasets'
+    # download from local ABSADatasets
+    backup_datasets_dir = find_dir('../integrated_datasets', [dataset, task], disable_alert=True, recursive=True)
+
+    if not backup_datasets_dir:
+        download_datasets_from_github('backup_datasets_dir')
+
+    datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
+    if not os.path.exists(datasets_dir):
+        os.makedirs(datasets_dir)
+
     if rewrite_cache:
         print('Remove temp files (if any)')
         for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
@@ -1047,11 +1062,11 @@ def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
 
         print('Remove Done')
 
-    # for f in os.listdir(backup_datasets_dir):
-    #     if os.path.isfile(os.path.join(backup_datasets_dir, f)):
-    #         shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
-    #     if os.path.isdir(os.path.join(backup_datasets_dir, f)):
-    #         shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+    for f in os.listdir(backup_datasets_dir):
+        if os.path.isfile(os.path.join(backup_datasets_dir, f)):
+            shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+        elif os.path.isdir(os.path.join(backup_datasets_dir, f)):
+            shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
 
 
 filter_key_words = ['.py', '.ignore', '.md', 'readme', 'log', 'result', 'zip', '.state_dict', '.model', '.png', 'acc_', 'f1_', '.aug']
@@ -1079,8 +1094,8 @@ def detect_dataset(dataset_path, task='apc'):
             dataset_file['valid'] += find_files(d, ['dev', task], exclude_key=['inference', 'train.'] + filter_key_words)
 
     if len(dataset_file['train']) == 0:
-        if os.path.isdir(max(d, search_path)):
-            print('No train set found from: {}, unrecognized files: {}'.format(dataset_path, ', '.join(os.listdir(max(d, search_path)))))
+        if os.path.isdir(d) or os.path.isdir(search_path):
+            print('No train set found from: {}, detected files: {}'.format(dataset_path, ', '.join(os.listdir(d)+os.listdir(search_path))))
         raise RuntimeError('Fail to locate dataset: {}. If you are using your own dataset,' ' you may need rename your dataset according to {}'.format(
             dataset_path, 'https://github.com/yangheng95/ABSADatasets#important-rename-your-dataset-filename-before-use-it-in-pyabsa'))
 
