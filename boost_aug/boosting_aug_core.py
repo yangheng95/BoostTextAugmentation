@@ -13,6 +13,7 @@ import os
 import numpy as np
 import torch
 import tqdm
+import language_tool_python
 
 from findfile import find_cwd_files, find_cwd_dir, find_cwd_dirs, find_dir, find_files, find_dirs, find_file
 from pyabsa import APCConfigManager, APCCheckpointManager, TextClassifierCheckpointManager, APCModelList
@@ -24,12 +25,12 @@ from termcolor import colored
 from pyabsa.functional import Trainer
 from pyabsa.functional.dataset import DatasetItem
 from pyabsa.functional.dataset.dataset_manager import download_datasets_from_github, ABSADatasetList, ClassificationDatasetList
+
 from transformers import BertForMaskedLM, DebertaV2ForMaskedLM, AutoConfig, AutoTokenizer, RobertaForMaskedLM
 
 from pyabsa import ClassificationConfigManager, BERTClassificationModelList, ClassificationDatasetList
 
 from boost_aug import __version__
-
 
 def rename(src, tgt):
     if os.path.exists(tgt):
@@ -80,7 +81,7 @@ class BoostingAug:
                  CONFIDENCE_THRESHOLD=0.99,
                  AUGMENT_NUM_PER_CASE=10,
                  WINNER_NUM_PER_CASE=10,
-                 PERPLEXITY_THRESHOLD=5,
+                 PERPLEXITY_THRESHOLD=4,
                  AUGMENT_PCT=0.1,
                  AUGMENT_BACKEND=AugmentBackend.EDA,
                  USE_CONFIDENCE=True,
@@ -100,6 +101,7 @@ class BoostingAug:
         :param AUGMENT_PCT: Word change probability used in backend augment method
         :param AUGMENT_BACKEND: Augmentation backend used for augmentations generation, e.g., EDA, ContextualWordEmbsAug
         """
+        # self.tool = language_tool_python.LanguageTool('en-US')
 
         assert hasattr(AugmentBackend, AUGMENT_BACKEND)
         if not ROOT or not os.path.exists(ROOT):
@@ -146,7 +148,6 @@ class BoostingAug:
                 self.augmenter = naw.SpellingAug()
 
     def get_apc_config(self, config):
-
         config.BOOSTING_FOLD = self.BOOSTING_FOLD
         config.CLASSIFIER_TRAINING_NUM = self.CLASSIFIER_TRAINING_NUM
         config.CONFIDENCE_THRESHOLD = self.CONFIDENCE_THRESHOLD
@@ -165,12 +166,11 @@ class BoostingAug:
         apc_config_english.pretrained_bert = 'microsoft/deberta-v3-base'
         apc_config_english.SRD = 3
         apc_config_english.lcf = 'cdw'
+        apc_config_english.optimizer = 'adamw'
         apc_config_english.use_bert_spc = True
         apc_config_english.learning_rate = 1e-5
         apc_config_english.batch_size = 16
         apc_config_english.num_epoch = 25
-        apc_config_english.embed_dim = 768
-        apc_config_english.hidden_dim = 768
         apc_config_english.log_step = -1
         apc_config_english.evaluate_begin = 5
         apc_config_english.l2reg = 1e-8
@@ -194,11 +194,9 @@ class BoostingAug:
         tc_config_english.dropout = 0
         tc_config_english.model = BERTClassificationModelList.BERT
         tc_config_english.pretrained_bert = 'microsoft/deberta-v3-base'
-        tc_config_english.optimizer = 'adam'
+        tc_config_english.optimizer = 'adamw'
         tc_config_english.cache_dataset = False
         tc_config_english.patience = 10
-        tc_config_english.hidden_dim = 768
-        tc_config_english.embed_dim = 768
         tc_config_english.log_step = -1
         tc_config_english.learning_rate = 1e-5
         tc_config_english.batch_size = 16
