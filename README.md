@@ -1,4 +1,4 @@
-# Crossing Boosting Augment Framework for Text Classification
+# Boosting Augment Framework for Text Classification
 
 ## Install BoostAug
 
@@ -48,7 +48,7 @@ BoostingAugmenter = BoostingAug(AUGMENT_BACKEND=aug_backend, device=autocuda.aut
 
 ```
 
-### Crossing Boosting Augment for APC
+### Boosting Augment for APC
 
 ```python3
 BoostingAugmenter = BoostingAug()
@@ -80,7 +80,7 @@ BoostingAugmenter.apc_classic_boost_training(apc_config_english,
 
 ```
 
-### Crossing Boosting Augment for Text Classification
+### Boosting Augment for Text Classification
 
 ```python3
 
