@@ -1,4 +1,12 @@
-# Boosting Augment Framework for Text Classification
+# Boosting Data Augmentation for Text Classification
+
+## Notice
+This tool depends on the [PyABSA](https://github.com/yangheng95/PyABSA), 
+and is integrated with the [ABSADatasets](https://github.com/yangheng95/ABSADatasets).
+
+To augment your own dataset, you need to prepare your dataset according to **ABSADatasets**.
+Refer to the [instruction to process](https://github.com/yangheng95/ABSADatasets) 
+or [annotate your dataset](https://github.com/yangheng95/ABSADatasets/tree/v1.2/DPT).
 
 ## Install BoostAug
 
@@ -68,15 +76,15 @@ apc_config_english.l2reg = 1e-8
 apc_config_english.seed = seeds
 apc_config_english.cross_validate_fold = -1  # disable cross_validate
 
-BoostingAugmenter.apc_boost_free_training(apc_config_english,
-                                          ABSADatasetList.Laptop14)
+# BoostingAugmenter.apc_boost_free_training(apc_config_english,
+#                                           ABSADatasetList.Laptop14)
 
 BoostingAugmenter.apc_cross_boost_training(apc_config_english,
                                            ABSADatasetList.Laptop14,
                                            rewrite_cache=True)
 
-BoostingAugmenter.apc_classic_boost_training(apc_config_english,
-                                             ABSADatasetList.Laptop14)
+# BoostingAugmenter.apc_classic_boost_training(apc_config_english,
+#                                              ABSADatasetList.Laptop14)
 
 ```
 
@@ -98,13 +106,13 @@ apc_config_english.l2reg = 1e-8
 apc_config_english.seed = seeds
 apc_config_english.cross_validate_fold = -1  # disable cross_validate
 
-BoostingAugmenter.tc_boost_free_training(apc_config_english,
-                                         ABSADatasetList.Laptop14)
+# BoostingAugmenter.tc_boost_free_training(apc_config_english,
+#                                          ABSADatasetList.Laptop14)
 
 BoostingAugmenter.tc_cross_boost_training(apc_config_english,
                                           ABSADatasetList.Laptop14,
                                           rewrite_cache=True)
 
-BoostingAugmenter.tc_classic_boost_training(apc_config_english,
-                                             ABSADatasetList.Laptop14)
+# BoostingAugmenter.tc_classic_boost_training(apc_config_english,
+#                                             ABSADatasetList.Laptop14)
 ```
