@@ -13,22 +13,22 @@ import os
 import numpy as np
 import torch
 import tqdm
-import language_tool_python
 
-from findfile import find_cwd_files, find_cwd_dir, find_cwd_dirs, find_dir, find_files, find_dirs, find_file
-from pyabsa import APCConfigManager, APCCheckpointManager, TextClassifierCheckpointManager, APCModelList
+from findfile import find_cwd_files, find_cwd_dir, find_dir, find_files, find_dirs, find_file
+from pyabsa import APCConfigManager, APCCheckpointManager, TCConfigManager, APCModelList, TCCheckpointManager
 from pyabsa.core.apc.prediction.sentiment_classifier import SentimentClassifier
+from pyabsa.functional.dataset.dataset_manager import download_datasets_from_github
 from pyabsa.utils.pyabsa_utils import retry
 
 from termcolor import colored
 
 from pyabsa.functional import Trainer
 from pyabsa.functional.dataset import DatasetItem
-from pyabsa.functional.dataset.dataset_manager import download_datasets_from_github, ABSADatasetList, ClassificationDatasetList
+from pyabsa import ABSADatasetList
 
 from transformers import BertForMaskedLM, DebertaV2ForMaskedLM, AutoConfig, AutoTokenizer, RobertaForMaskedLM
 
-from pyabsa import ClassificationConfigManager, BERTClassificationModelList, ClassificationDatasetList
+from pyabsa import TCConfigManager, BERTClassificationModelList, ClassificationDatasetList
 
 from boost_aug import __version__
 
@@ -158,7 +158,7 @@ class BoostingAug:
         config.AUGMENT_TOOL = self.AUGMENT_BACKEND
         config.BoostAugVersion = __version__
 
-        apc_config_english = copy.deepcopy(config)
+        apc_config_english = APCConfigManager.get_apc_config_english()
         apc_config_english.cache_dataset = False
         apc_config_english.patience = 10
         apc_config_english.log_step = -1
@@ -189,7 +189,7 @@ class BoostingAug:
         config.AUGMENT_TOOL = self.AUGMENT_BACKEND
         config.BoostAugVersion = __version__
 
-        tc_config_english = copy.deepcopy(config)
+        tc_config_english = TCConfigManager.get_tc_config_english()
         tc_config_english.max_seq_len = 80
         tc_config_english.dropout = 0
         tc_config_english.model = BERTClassificationModelList.BERT
@@ -264,7 +264,7 @@ class BoostingAug:
                 if isinstance(augs, str):
                     augs = [augs]
                 for aug in augs:
-                    if aug.endswith('PLACEHOLDER {}'.format(label)):
+                    if aug.endswith('PLACEHOLDER {}'.format(label)) or aug.endswith('PLACEHOLDER{}'.format(label)):
                         _text = aug.replace('PLACEHOLDER', '$LABEL$')
                         fout_aug_train.write(_text + '\n')
 
@@ -279,7 +279,7 @@ class BoostingAug:
                            auto_device=self.device  # automatic choose CUDA or CPU
                            ).load_trained_model()
 
-    def tc_cross_boost_training(self, config: ClassificationConfigManager,
+    def tc_cross_boost_training(self, config: TCConfigManager,
                                 dataset: DatasetItem,
                                 rewrite_cache=True,
                                 task='text_classification',
@@ -362,7 +362,7 @@ class BoostingAug:
                     max_f1 = max(path[path.index('f1'):], checkpoint_path)
                     checkpoint_path = path
 
-            sent_classifier = TextClassifierCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
+            sent_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
             sent_classifier.opt.eval_batch_size = 128
 
             MLM, tokenizer = get_mlm_and_tokenizer(sent_classifier, _config)
@@ -393,7 +393,7 @@ class BoostingAug:
                         raw_augs = [raw_augs]
                     augs = {}
                     for text in raw_augs:
-                        if text.endswith('PLACEHOLDER {}'.format(label)):
+                        if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
                                 results = sent_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
                                 ids = tokenizer(text.replace('PLACEHOLDER', '{}'.format(label)), return_tensors="pt")
@@ -403,13 +403,13 @@ class BoostingAug:
                                 perplexity = torch.exp(loss / ids['input_ids'].size(1))
 
                                 perplexity_list.append(perplexity.item())
-                                confidence_list.append(results[0]['confidence'])
+                                confidence_list.append(results['confidence'])
                                 if self.USE_LABEL:
-                                    if results[0]['ref_check'] != 'Correct':
+                                    if results['ref_check'] != 'Correct':
                                         continue
 
                                 if self.USE_CONFIDENCE:
-                                    if results[0]['confidence'] <= self.CONFIDENCE_THRESHOLD:
+                                    if results['confidence'] <= self.CONFIDENCE_THRESHOLD:
                                         continue
 
                                 augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$LABEL$')]
@@ -454,7 +454,7 @@ class BoostingAug:
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
-    def tc_mono_boost_training(self, config: ClassificationConfigManager,
+    def tc_mono_boost_training(self, config: TCConfigManager,
                                dataset: DatasetItem,
                                rewrite_cache=True,
                                task='text_classification',
@@ -497,7 +497,7 @@ class BoostingAug:
                     max_f1 = max(path[path.index('f1'):], checkpoint_path)
                     checkpoint_path = path
 
-            sent_classifier = TextClassifierCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
+            sent_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
 
             sent_classifier.opt.eval_batch_size = 128
 
@@ -529,7 +529,7 @@ class BoostingAug:
                         raw_augs = [raw_augs]
                     augs = {}
                     for text in raw_augs:
-                        if text.endswith('PLACEHOLDER {}'.format(label)):
+                        if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
                                 results = sent_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
                                 ids = tokenizer(text.replace('PLACEHOLDER', '{}'.format(label)), return_tensors="pt")
@@ -539,9 +539,9 @@ class BoostingAug:
                                 perplexity = torch.exp(loss / ids['input_ids'].size(1))
 
                                 perplexity_list.append(perplexity.item())
-                                confidence_list.append(results[0]['confidence'])
+                                confidence_list.append(results['confidence'])
 
-                                if results[0]['ref_check'] == 'Correct' and results[0]['confidence'] > self.CONFIDENCE_THRESHOLD:
+                                if results['ref_check'] == 'Correct' and results['confidence'] > self.CONFIDENCE_THRESHOLD:
                                     augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$LABEL$')]
 
                     key_rank = sorted(augs.keys())
@@ -794,14 +794,14 @@ class BoostingAug:
                             perplexity = torch.exp(loss / ids['input_ids'].size(1))
 
                             perplexity_list.append(perplexity.item())
-                            confidence_list.append(results[0]['confidence'][0])
+                            confidence_list.append(results['confidence'][0])
 
                             if self.USE_LABEL:
-                                if results[0]['ref_check'][0] != 'Correct':
+                                if results['ref_check'][0] != 'Correct':
                                     continue
 
                             if self.USE_CONFIDENCE:
-                                if results[0]['confidence'][0] <= self.CONFIDENCE_THRESHOLD:
+                                if results['confidence'][0] <= self.CONFIDENCE_THRESHOLD:
                                     continue
                             augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$T$'), lines[i + 1], lines[i + 2]]
 
@@ -817,9 +817,9 @@ class BoostingAug:
                         else:
                             augmentations += augs[key]
 
-                            # d = aug_dict.get(results[0]['ref_sentiment'][0], [])
+                            # d = aug_dict.get(results['ref_sentiment'][0], [])
                             # d.append([text.replace('PLACEHOLDER', '$T$'), lines[i + 1], lines[i + 2]])
-                            # aug_dict[results[0]['ref_sentiment'][0]] = d
+                            # aug_dict[results['ref_sentiment'][0]] = d
             print('Avg Confidence: {} Max Confidence: {} Min Confidence: {}'.format(np.average(confidence_list), max(confidence_list), min(confidence_list)))
             print('Avg Perplexity: {} Max Perplexity: {} Min Perplexity: {}'.format(np.average(perplexity_list), max(perplexity_list), min(perplexity_list)))
 
@@ -946,9 +946,9 @@ class BoostingAug:
                             perplexity = torch.exp(loss / ids['input_ids'].size(1))
 
                             perplexity_list.append(perplexity.item())
-                            confidence_list.append(results[0]['confidence'][0])
+                            confidence_list.append(results['confidence'][0])
 
-                            if results[0]['ref_check'][0] == 'Correct' and results[0]['confidence'][0] > self.CONFIDENCE_THRESHOLD:
+                            if results['ref_check'][0] == 'Correct' and results['confidence'][0] > self.CONFIDENCE_THRESHOLD:
                                 augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$T$'), lines[i + 1], lines[i + 2]]
 
                     key_rank = sorted(augs.keys())
@@ -1023,31 +1023,9 @@ def post_clean(dataset_path):
 
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
-    # # download from remote ABSADatasets
-    # download_datasets_from_github('.')
-    # datasets_dir = 'integrated_datasets'
-    # if rewrite_cache:
-    #     print('Remove temp files (if any)')
-    #     for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
-    #         # for f in find_files(datasets_dir, ['.tmp']):
-    #         remove(f)
-    #     os.system('rm {}/valid.dat.tmp'.format(datasets_dir))
-    #     os.system('rm {}/train.dat.tmp'.format(datasets_dir))
-    #     if find_cwd_dir(['run', dataset]):
-    #         shutil.rmtree(find_cwd_dir(['run', dataset]))
-    #
-    #     print('Remove Done')
-
-    # download from local ABSADatasets
-    backup_datasets_dir = find_dir('../integrated_datasets', [dataset, task], disable_alert=True, recursive=True)
-
-    if not backup_datasets_dir:
-        download_datasets_from_github('backup_datasets_dir')
-
-    datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
-    if not os.path.exists(datasets_dir):
-        os.makedirs(datasets_dir)
-
+    # download from remote ABSADatasets
+    download_datasets_from_github('.')
+    datasets_dir = 'integrated_datasets'
     if rewrite_cache:
         print('Remove temp files (if any)')
         for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
@@ -1060,11 +1038,33 @@ def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
 
         print('Remove Done')
 
-    for f in os.listdir(backup_datasets_dir):
-        if os.path.isfile(os.path.join(backup_datasets_dir, f)):
-            shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
-        elif os.path.isdir(os.path.join(backup_datasets_dir, f)):
-            shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+    # # download from local ABSADatasets
+    # backup_datasets_dir = find_dir('../integrated_datasets', key=[dataset, task], disable_alert=True, recursive=True)
+    #
+    # if not backup_datasets_dir:
+    #     download_datasets_from_github(backup_datasets_dir)
+    #
+    # datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
+    # if not os.path.exists(datasets_dir):
+    #     os.makedirs(datasets_dir)
+    #
+    # if rewrite_cache:
+    #     print('Remove temp files (if any)')
+    #     for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
+    #         # for f in find_files(datasets_dir, ['.tmp']):
+    #         remove(f)
+    #     os.system('rm {}/valid.dat.tmp'.format(datasets_dir))
+    #     os.system('rm {}/train.dat.tmp'.format(datasets_dir))
+    #     if find_cwd_dir(['run', dataset]):
+    #         shutil.rmtree(find_cwd_dir(['run', dataset]))
+    #
+    #     print('Remove Done')
+    #
+    # for f in os.listdir(backup_datasets_dir):
+    #     if os.path.isfile(os.path.join(backup_datasets_dir, f)):
+    #         shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+    #     elif os.path.isdir(os.path.join(backup_datasets_dir, f)):
+    #         shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
 
 
 filter_key_words = ['.py', '.ignore', '.md', 'readme', 'log', 'result', 'zip', '.state_dict', '.model', '.png', 'acc_', 'f1_', '.aug']
