@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-# file: boosting_aug_core.py
-# time: 2021/12/20
-# author: yangheng <yangheng@m.scnu.edu.cn>
-# github: https://github.com/yangheng95
-# Copyright (C) 2021. All Rights Reserved.
-import copy
 import itertools
 import random
 import shutil
@@ -15,24 +8,24 @@ import torch
 import tqdm
 
 from findfile import find_cwd_files, find_cwd_dir, find_dir, find_files, find_dirs, find_file
-from pyabsa import APCConfigManager, APCCheckpointManager, TCConfigManager, APCModelList, TCCheckpointManager
+from pyabsa import APCCheckpointManager, APCModelList, TCCheckpointManager, BERTTCModelList, TCDatasetList, TCConfigManager, APCConfigManager
 from pyabsa.core.apc.prediction.sentiment_classifier import SentimentClassifier
-from pyabsa.functional.dataset.dataset_manager import download_datasets_from_github
-from pyabsa.utils.pyabsa_utils import retry
 
 from termcolor import colored
 
 from pyabsa.functional import Trainer
+from pyabsa.functional.config.config_manager import ConfigManager
 from pyabsa.functional.dataset import DatasetItem
 from pyabsa import ABSADatasetList
 
 from transformers import BertForMaskedLM, DebertaV2ForMaskedLM, AutoConfig, AutoTokenizer, RobertaForMaskedLM
 
-from pyabsa import TCConfigManager, BERTClassificationModelList, ClassificationDatasetList
-
 from boost_aug import __version__
 
+
 def rename(src, tgt):
+    if src == tgt:
+        return
     if os.path.exists(tgt):
         remove(tgt)
     os.rename(src, tgt)
@@ -43,7 +36,6 @@ def remove(p):
         os.remove(p)
 
 
-@retry
 def get_mlm_and_tokenizer(sent_classifier, config):
     if isinstance(sent_classifier, SentimentClassifier):
         base_model = sent_classifier.model.bert.base_model
@@ -76,7 +68,7 @@ class BoostingAug:
 
     def __init__(self,
                  ROOT: str = '',
-                 BOOSTING_FOLD=4,
+                 BOOSTING_FOLD=5,
                  CLASSIFIER_TRAINING_NUM=2,
                  CONFIDENCE_THRESHOLD=0.99,
                  AUGMENT_NUM_PER_CASE=10,
@@ -96,12 +88,11 @@ class BoostingAug:
         :param CLASSIFIER_TRAINING_NUM: Number of pre-trained inference model using for confidence calculation
         :param CONFIDENCE_THRESHOLD: Confidence threshold used for augmentations filtering
         :param AUGMENT_NUM_PER_CASE: Number of augmentations per example
-        :param WINNER_NUM_PER_CASE: Number of selected augmentations per example
+        :param WINNER_NUM_PER_CASE: Number of selected augmentations per example in confidence ranking
         :param PERPLEXITY_THRESHOLD: Perplexity threshold used for augmentations filtering
         :param AUGMENT_PCT: Word change probability used in backend augment method
         :param AUGMENT_BACKEND: Augmentation backend used for augmentations generation, e.g., EDA, ContextualWordEmbsAug
         """
-        # self.tool = language_tool_python.LanguageTool('en-US')
 
         assert hasattr(AugmentBackend, AUGMENT_BACKEND)
         if not ROOT or not os.path.exists(ROOT):
@@ -172,7 +163,7 @@ class BoostingAug:
         apc_config_english.batch_size = 16
         apc_config_english.num_epoch = 25
         apc_config_english.log_step = -1
-        apc_config_english.evaluate_begin = 5
+        apc_config_english.evaluate_begin = 0
         apc_config_english.l2reg = 1e-8
         apc_config_english.cross_validate_fold = -1  # disable cross_validate
         apc_config_english.seed = [random.randint(0, 10000) for _ in range(2)]
@@ -192,7 +183,7 @@ class BoostingAug:
         tc_config_english = TCConfigManager.get_tc_config_english()
         tc_config_english.max_seq_len = 80
         tc_config_english.dropout = 0
-        tc_config_english.model = BERTClassificationModelList.BERT
+        tc_config_english.model = BERTTCModelList.BERT
         tc_config_english.pretrained_bert = 'microsoft/deberta-v3-base'
         tc_config_english.optimizer = 'adamw'
         tc_config_english.cache_dataset = False
@@ -200,14 +191,14 @@ class BoostingAug:
         tc_config_english.log_step = -1
         tc_config_english.learning_rate = 1e-5
         tc_config_english.batch_size = 16
-        tc_config_english.num_epoch = 25
-        tc_config_english.evaluate_begin = 5
+        tc_config_english.num_epoch = 10
+        tc_config_english.evaluate_begin = 0
         tc_config_english.l2reg = 1e-8
         tc_config_english.cross_validate_fold = -1  # disable cross_validate
         tc_config_english.seed = [random.randint(0, 10000) for _ in range(2)]
         return tc_config_english
 
-    def tc_boost_free_training(self, config: APCConfigManager,
+    def tc_boost_free_training(self, config: ConfigManager,
                                dataset: DatasetItem,
                                task='text_classification',
                                ):
@@ -221,7 +212,7 @@ class BoostingAug:
                        auto_device=self.device  # automatic choose CUDA or CPU
                        )
 
-    def tc_classic_boost_training(self, config: APCConfigManager,
+    def tc_classic_boost_training(self, config: ConfigManager,
                                   dataset: DatasetItem,
                                   rewrite_cache=True,
                                   task='text_classification',
@@ -230,10 +221,12 @@ class BoostingAug:
         if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
             dataset = DatasetItem(dataset)
         _config = self.get_tc_config(config)
-        if 'pretrained_bert' in _config.args:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
-        else:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        # if 'lstm' not in config.model.__name__.lower():
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+        # else:
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
         if rewrite_cache:
             prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
 
@@ -279,7 +272,7 @@ class BoostingAug:
                            auto_device=self.device  # automatic choose CUDA or CPU
                            ).load_trained_model()
 
-    def tc_cross_boost_training(self, config: TCConfigManager,
+    def tc_cross_boost_training(self, config: ConfigManager,
                                 dataset: DatasetItem,
                                 rewrite_cache=True,
                                 task='text_classification',
@@ -288,10 +281,12 @@ class BoostingAug:
         if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
             dataset = DatasetItem(dataset)
         _config = self.get_tc_config(config)
-        if 'pretrained_bert' in _config.args:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
-        else:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        # if 'lstm' not in config.model.__name__.lower():
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+        # else:
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
 
         prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
 
@@ -322,7 +317,7 @@ class BoostingAug:
 
         for fold_id, b_idx in enumerate(range(len(folds))):
             print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
-            f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), '.augment.ignore'])
+            f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
             if f:
                 rename(f, f.replace('.ignore', ''))
                 continue
@@ -379,7 +374,7 @@ class BoostingAug:
                 lines = fin.readlines()
                 fin.close()
                 remove(boost_set)
-                for i in tqdm.tqdm(range(0, len(lines)), postfix='Augmenting...'):
+                for i in tqdm.tqdm(range(0, len(lines)), postfix='No.{} Augmenting...'.format(b_idx + 1)):
 
                     lines[i] = lines[i].strip().replace('$LABEL$', 'PLACEHOLDER')
                     label = lines[i].split('PLACEHOLDER')[1].strip()
@@ -395,7 +390,10 @@ class BoostingAug:
                     for text in raw_augs:
                         if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
-                                results = sent_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
+                                try:
+                                    results = sent_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
+                                except:
+                                    continue
                                 ids = tokenizer(text.replace('PLACEHOLDER', '{}'.format(label)), return_tensors="pt")
                                 ids['labels'] = ids['input_ids'].clone()
                                 ids = ids.to(self.device)
@@ -454,7 +452,7 @@ class BoostingAug:
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
-    def tc_mono_boost_training(self, config: TCConfigManager,
+    def tc_mono_boost_training(self, config: ConfigManager,
                                dataset: DatasetItem,
                                rewrite_cache=True,
                                task='text_classification',
@@ -463,10 +461,12 @@ class BoostingAug:
         if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
             dataset = DatasetItem(dataset)
         _config = self.get_tc_config(config)
-        if 'pretrained_bert' in _config.args:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
-        else:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        # if 'lstm' not in config.model.__name__.lower():
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+        # else:
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
 
         prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
 
@@ -515,7 +515,7 @@ class BoostingAug:
                 lines = fin.readlines()
                 fin.close()
                 # remove(boost_set)
-                for i in tqdm.tqdm(range(0, len(lines)), postfix='Augmenting...'):
+                for i in tqdm.tqdm(range(0, len(lines)), postfix='Mono Augmenting...'):
 
                     lines[i] = lines[i].strip().replace('$LABEL$', 'PLACEHOLDER')
                     label = lines[i].split('PLACEHOLDER')[1].strip()
@@ -531,7 +531,10 @@ class BoostingAug:
                     for text in raw_augs:
                         if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
-                                results = sent_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
+                                try:
+                                    results = sent_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
+                                except:
+                                    continue
                                 ids = tokenizer(text.replace('PLACEHOLDER', '{}'.format(label)), return_tensors="pt")
                                 ids['labels'] = ids['input_ids'].clone()
                                 ids = ids.to(self.device)
@@ -578,7 +581,7 @@ class BoostingAug:
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
-    def apc_boost_free_training(self, config: APCConfigManager,
+    def apc_boost_free_training(self, config: ConfigManager,
                                 dataset: DatasetItem,
                                 task='apc',
                                 ):
@@ -592,7 +595,7 @@ class BoostingAug:
                        auto_device=self.device  # automatic choose CUDA or CPU
                        )
 
-    def apc_classic_boost_training(self, config: APCConfigManager,
+    def apc_classic_boost_training(self, config: ConfigManager,
                                    dataset: DatasetItem,
                                    task='apc',
                                    rewrite_cache=True,
@@ -601,10 +604,12 @@ class BoostingAug:
         if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
             dataset = DatasetItem(dataset)
         _config = self.get_apc_config(config)
-        if 'pretrained_bert' in _config.args:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
-        else:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        # if 'lstm' not in config.model.__name__.lower():
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+        # else:
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
         if rewrite_cache:
             prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
 
@@ -655,7 +660,7 @@ class BoostingAug:
                            auto_device=self.device  # automatic choose CUDA or CPU
                            ).load_trained_model()
 
-    def apc_cross_boost_training(self, config: APCConfigManager,
+    def apc_cross_boost_training(self, config: ConfigManager,
                                  dataset: DatasetItem,
                                  rewrite_cache=True,
                                  task='apc',
@@ -664,10 +669,12 @@ class BoostingAug:
         if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
             dataset = DatasetItem(dataset)
         _config = self.get_apc_config(config)
-        if 'pretrained_bert' in _config.args:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
-        else:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        # if 'lstm' not in config.model.__name__.lower():
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+        # else:
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
 
         prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
 
@@ -702,7 +709,7 @@ class BoostingAug:
 
         for fold_id, b_idx in enumerate(range(len(folds))):
             print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
-            f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), '.augment.ignore'])
+            f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
             if f:
                 rename(f, f.replace('.ignore', ''))
                 continue
@@ -786,7 +793,10 @@ class BoostingAug:
                             continue
 
                         with torch.no_grad():
-                            results = sent_classifier.infer(_text, print_result=False)
+                            try:
+                                results = sent_classifier.infer(_text, print_result=False)
+                            except:
+                                continue
                             ids = tokenizer(text.replace('PLACEHOLDER', '{}'.format(lines[i + 1])), return_tensors="pt")
                             ids['labels'] = ids['input_ids'].clone()
                             ids = ids.to(self.device)
@@ -857,7 +867,7 @@ class BoostingAug:
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
-    def apc_mono_boost_training(self, config: APCConfigManager,
+    def apc_mono_boost_training(self, config: ConfigManager,
                                 dataset: DatasetItem,
                                 rewrite_cache=True,
                                 task='apc',
@@ -866,10 +876,12 @@ class BoostingAug:
         if not isinstance(dataset, DatasetItem) and os.path.exists(dataset):
             dataset = DatasetItem(dataset)
         _config = self.get_apc_config(config)
-        if 'pretrained_bert' in _config.args:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
-        else:
-            tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        # if 'lstm' not in config.model.__name__.lower():
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+        # else:
+        #     tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, 'glove')
 
         prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
 
@@ -938,7 +950,10 @@ class BoostingAug:
                             continue
 
                         with torch.no_grad():
-                            results = sent_classifier.infer(_text, print_result=False)
+                            try:
+                                results = sent_classifier.infer(_text, print_result=False)
+                            except:
+                                continue
                             ids = tokenizer(text.replace('PLACEHOLDER', '{}'.format(lines[i + 1])), return_tensors="pt")
                             ids['labels'] = ids['input_ids'].clone()
                             ids = ids.to(self.device)
@@ -1010,26 +1025,27 @@ def query_dataset_detail(dataset_name, task='text_classification'):
 
 
 def post_clean(dataset_path):
-    if os.path.exists('{}/train.dat.tmp'.format(os.path.dirname(dataset_path))):
-        remove('{}/train.dat.tmp'.format(os.path.dirname(dataset_path)))
-    if os.path.exists('{}/valid.dat.tmp'.format(os.path.dirname(dataset_path))):
-        remove('{}/valid.dat.tmp'.format(os.path.dirname(dataset_path)))
-
-    for f in find_cwd_files('.tmp'):
-        remove(f)
+    if os.path.exists('{}/train.dat.tmp'.format(dataset_path)):
+        remove('{}/train.dat.tmp'.format(dataset_path))
+    if os.path.exists('{}/valid.dat.tmp'.format(dataset_path)):
+        remove('{}/valid.dat.tmp'.format(dataset_path))
+    # for f in find_cwd_files('.tmp'):
+    #     remove(f)
 
     if find_cwd_dir('run'):
         shutil.rmtree(find_cwd_dir('run'))
 
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
-    # download from remote ABSADatasets
-    download_datasets_from_github('.')
-    datasets_dir = 'integrated_datasets'
+    backup_datasets_dir = find_dir('../integrated_datasets', key=[dataset, task], disable_alert=True, recursive=5)
+
+    datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
+    if not os.path.exists(datasets_dir):
+        os.makedirs(datasets_dir)
+
     if rewrite_cache:
         print('Remove temp files (if any)')
         for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
-            # for f in find_files(datasets_dir, ['.tmp']):
             remove(f)
         os.system('rm {}/valid.dat.tmp'.format(datasets_dir))
         os.system('rm {}/train.dat.tmp'.format(datasets_dir))
@@ -1038,33 +1054,11 @@ def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
 
         print('Remove Done')
 
-    # # download from local ABSADatasets
-    # backup_datasets_dir = find_dir('../integrated_datasets', key=[dataset, task], disable_alert=True, recursive=True)
-    #
-    # if not backup_datasets_dir:
-    #     download_datasets_from_github(backup_datasets_dir)
-    #
-    # datasets_dir = backup_datasets_dir[backup_datasets_dir.find('integrated_datasets'):]
-    # if not os.path.exists(datasets_dir):
-    #     os.makedirs(datasets_dir)
-    #
-    # if rewrite_cache:
-    #     print('Remove temp files (if any)')
-    #     for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
-    #         # for f in find_files(datasets_dir, ['.tmp']):
-    #         remove(f)
-    #     os.system('rm {}/valid.dat.tmp'.format(datasets_dir))
-    #     os.system('rm {}/train.dat.tmp'.format(datasets_dir))
-    #     if find_cwd_dir(['run', dataset]):
-    #         shutil.rmtree(find_cwd_dir(['run', dataset]))
-    #
-    #     print('Remove Done')
-    #
-    # for f in os.listdir(backup_datasets_dir):
-    #     if os.path.isfile(os.path.join(backup_datasets_dir, f)):
-    #         shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
-    #     elif os.path.isdir(os.path.join(backup_datasets_dir, f)):
-    #         shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+    for f in os.listdir(backup_datasets_dir):
+        if os.path.isfile(os.path.join(backup_datasets_dir, f)):
+            shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+        elif os.path.isdir(os.path.join(backup_datasets_dir, f)):
+            shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
 
 
 filter_key_words = ['.py', '.ignore', '.md', 'readme', 'log', 'result', 'zip', '.state_dict', '.model', '.png', 'acc_', 'f1_', '.aug']
@@ -1074,12 +1068,9 @@ def detect_dataset(dataset_path, task='apc'):
     if not isinstance(dataset_path, DatasetItem):
         dataset_path = DatasetItem(dataset_path)
     dataset_file = {'train': [], 'test': [], 'valid': []}
-    search_path = ''
-    d = ''
     for d in dataset_path:
-        if not os.path.exists(d) or hasattr(ABSADatasetList, d) or hasattr(ClassificationDatasetList, d):
-            print('{} dataset is loading from: {}'.format(d, 'https://github.com/yangheng95/ABSADatasets'))
-            download_datasets_from_github(os.getcwd())
+        if not os.path.exists(d) or hasattr(ABSADatasetList, d) or hasattr(TCDatasetList, d):
+            print('Loading {} dataset'.format(d))
             search_path = find_dir(os.getcwd(), [d, task, 'dataset'], exclude_key=['infer', 'test.'] + filter_key_words, disable_alert=False)
             dataset_file['train'] += find_files(search_path, [d, 'train', task], exclude_key=['.inference', 'test.'] + filter_key_words)
             dataset_file['test'] += find_files(search_path, [d, 'test', task], exclude_key=['inference', 'train.'] + filter_key_words)
@@ -1090,17 +1081,5 @@ def detect_dataset(dataset_path, task='apc'):
             dataset_file['test'] = find_files(d, ['test', task], exclude_key=['.inference', 'train.'] + filter_key_words)
             dataset_file['valid'] = find_files(d, ['valid', task], exclude_key=['.inference', 'train.'] + filter_key_words)
             dataset_file['valid'] += find_files(d, ['dev', task], exclude_key=['inference', 'train.'] + filter_key_words)
-
-    if len(dataset_file['train']) == 0:
-        if os.path.isdir(d) or os.path.isdir(search_path):
-            print('No train set found from: {}, detected files: {}'.format(dataset_path, ', '.join(os.listdir(d)+os.listdir(search_path))))
-        raise RuntimeError('Fail to locate dataset: {}. If you are using your own dataset,' ' you may need rename your dataset according to {}'.format(
-            dataset_path, 'https://github.com/yangheng95/ABSADatasets#important-rename-your-dataset-filename-before-use-it-in-pyabsa'))
-
-    if len(dataset_file['test']) == 0:
-        print('Warning, auto_evaluate=True, however cannot find test set using for evaluating!')
-
-    if len(dataset_path) > 1:
-        print(colored('Never mixing datasets with different sentiment labels for training & inference !', 'yellow'))
 
     return dataset_file
