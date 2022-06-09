@@ -1,11 +1,4 @@
-# -*- coding: utf-8 -*-
-# file: __init__.py.py
-# time: 2022/1/1
-# author: yangheng <yangheng@m.scnu.edu.cn>
-# github: https://github.com/yangheng95
-# Copyright (C) 2021. All Rights Reserved.
-
-__version__ = '1.2.13'
+__version__ = '2.1b0'
 __name__ = 'boostaug'
 
-from boost_aug.boostaug_core import BoostingAug, AugmentBackend
+from boost_aug.boostaug_core import ABSCBoostAug, TCBoostAug, AugmentBackend

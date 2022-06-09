@@ -22,8 +22,7 @@ setup(
     exclude_package_date={'': ['.gitignore']},
     # Choose your license
     license='MIT',
-    install_requires=['pyabsa>=1.14.7',
-                      'findfile>=1.7.9.1',
+    install_requires=['pyabsa>=1.14.8',
                       'textattack',
                       'nlpaug',
                       'tensorflow_text'],
