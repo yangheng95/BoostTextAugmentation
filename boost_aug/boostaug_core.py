@@ -7,6 +7,8 @@ import numpy as np
 import torch
 import tqdm
 
+from boost_aug import __version__
+
 from findfile import find_cwd_files, find_cwd_dir, find_dir, find_files, find_dirs, find_file
 from pyabsa import APCCheckpointManager, APCModelList, TCCheckpointManager, BERTTCModelList, TCDatasetList, TCConfigManager, APCConfigManager
 from pyabsa.core.apc.prediction.sentiment_classifier import SentimentClassifier
@@ -21,7 +23,6 @@ from pyabsa import ABSADatasetList
 
 from transformers import BertForMaskedLM, DebertaV2ForMaskedLM, AutoConfig, AutoTokenizer, RobertaForMaskedLM
 
-from boost_aug import __version__
 
 
 def rename(src, tgt):
@@ -139,25 +140,30 @@ class ABSCBoostAug:
             elif self.AUGMENT_BACKEND in 'SpellingAug':
                 self.augmenter = naw.SpellingAug()
 
-    def single_augment(self, text, aspect, label, num=3, dataset=''):
-
+    def load_augmentor(self, ckpt_path_or_dataset_name):
         if not hasattr(self, 'sent_classifier'):
-            keys = ['checkpoint', 'mono_boost', 'fast_lcf_bert', 'deberta', dataset]
+            try:
+                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(ckpt_path_or_dataset_name, auto_device=self.device)
+                self.sent_classifier.opt.eval_batch_size = 128
+                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
+            except:
+                keys = ['checkpoint', 'mono_boost', 'fast_lcf_bert', 'deberta', ckpt_path_or_dataset_name]
 
-            checkpoint_path = ''
-            max_f1 = ''
-            for path in find_dirs(self.ROOT, keys):
-                if 'f1' in path and path[path.index('f1'):] > max_f1:
-                    max_f1 = max(path[path.index('f1'):], checkpoint_path)
-                    checkpoint_path = path
+                checkpoint_path = ''
+                max_f1 = ''
+                for path in find_dirs(self.ROOT, keys):
+                    if 'f1' in path and path[path.index('f1'):] > max_f1:
+                        max_f1 = max(path[path.index('f1'):], checkpoint_path)
+                        checkpoint_path = path
 
-            if not checkpoint_path:
-                raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
+                if not checkpoint_path:
+                    raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
 
-            self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(checkpoint_path, auto_device=self.device)
-            self.sent_classifier.opt.eval_batch_size = 128
-            self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
-            # raise RuntimeError('No boost_augmentor is initialized, please run any augmentation first to initialize an augmentor, e.g., boost_aug, mono_aug or classic_aug')
+                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(checkpoint_path, auto_device=self.device)
+                self.sent_classifier.opt.eval_batch_size = 128
+                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
+
+    def single_augment(self, text, aspect, label, num=3, dataset=''):
 
         if self.AUGMENT_BACKEND in 'EDA':
             raw_augs = self.augmenter.augment(text)
@@ -221,7 +227,7 @@ class ABSCBoostAug:
         apc_config_english.evaluate_begin = 0
         apc_config_english.l2reg = 1e-8
         apc_config_english.cross_validate_fold = -1  # disable cross_validate
-        apc_config_english.seed = [random.randint(0, 10000) for _ in range(2)]
+        apc_config_english.seed = [random.randint(0, 10000) for _ in range(self.CLASSIFIER_TRAINING_NUM)]
         return apc_config_english
 
     def apc_classic_augment(self, config: ConfigManager,
@@ -331,10 +337,10 @@ class ABSCBoostAug:
 
         for fold_id, b_idx in enumerate(range(len(folds))):
             print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
-            f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
-            if f:
-                rename(f, f.replace('.ignore', ''))
-                continue
+            # f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
+            # if f:
+            #     rename(f, f.replace('.ignore', ''))
+            #     continue
             train_data = list(itertools.chain(*[x for i, x in enumerate(folds) if i != b_idx]))
             valid_data = folds[b_idx]
 
@@ -690,23 +696,30 @@ class TCBoostAug:
             elif self.AUGMENT_BACKEND in 'SpellingAug':
                 self.augmenter = naw.SpellingAug()
 
-    def single_augment(self, text, label, num=3, dataset=''):
-
+    def load_augmentor(self, ckpt_path_or_dataset_name):
         if not hasattr(self, 'text_classifier'):
-            keys = ['checkpoint', 'mono_boost', 'deberta', dataset]
+            try:
+                self.text_classifier = TCCheckpointManager.get_text_classifier(ckpt_path_or_dataset_name, auto_device=self.device)
+                self.text_classifier.opt.eval_batch_size = 128
+                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
+            except:
+                keys = ['checkpoint', 'mono_boost', 'deberta', ckpt_path_or_dataset_name]
 
-            checkpoint_path = ''
-            max_f1 = ''
-            for path in find_dirs(self.ROOT, keys):
-                if 'f1' in path and path[path.index('f1'):] > max_f1:
-                    max_f1 = max(path[path.index('f1'):], checkpoint_path)
-                    checkpoint_path = path
-            if not checkpoint_path:
-                raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
-            self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
-            self.text_classifier.opt.eval_batch_size = 128
-            self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
-            # raise RuntimeError('No boost_augmentor is initialized, please run any augmentation first to initialize an augmentor, e.g., boost_aug, mono_aug or classic_aug')
+                checkpoint_path = ''
+                max_f1 = ''
+                for path in find_dirs(self.ROOT, keys):
+                    if 'f1' in path and path[path.index('f1'):] > max_f1:
+                        max_f1 = max(path[path.index('f1'):], checkpoint_path)
+                        checkpoint_path = path
+                checkpoint_path = '{}'.format(ckpt_path_or_dataset_name)
+                if not checkpoint_path:
+                    raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
+                self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
+                self.text_classifier.opt.eval_batch_size = 128
+                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
+
+
+    def single_augment(self, text, label, num=3):
 
         if self.AUGMENT_BACKEND in 'EDA':
             raw_augs = self.augmenter.augment(text)
@@ -775,7 +788,7 @@ class TCBoostAug:
         tc_config_english.evaluate_begin = 0
         tc_config_english.l2reg = 1e-8
         tc_config_english.cross_validate_fold = -1  # disable cross_validate
-        tc_config_english.seed = [random.randint(0, 10000) for _ in range(2)]
+        tc_config_english.seed = [random.randint(0, 10000) for _ in range(self.CLASSIFIER_TRAINING_NUM)]
         return tc_config_english
 
     def tc_classic_augment(self, config: ConfigManager,
@@ -873,10 +886,10 @@ class TCBoostAug:
 
         for fold_id, b_idx in enumerate(range(len(folds))):
             print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
-            f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
-            if f:
-                rename(f, f.replace('.ignore', ''))
-                continue
+            # f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
+            # if f:
+            #     rename(f, f.replace('.ignore', ''))
+            #     continue
             train_data = list(itertools.chain(*[x for i, x in enumerate(folds) if i != b_idx]))
             valid_data = folds[b_idx]
 
@@ -1175,6 +1188,7 @@ def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
     if rewrite_cache:
         if datasets_dir:
             shutil.rmtree(datasets_dir)
+        download_datasets_from_github(os.getcwd())
         datasets_dir = find_cwd_dir('integrated_datasets', task, dataset)
 
         print('Remove temp files (if any)')
