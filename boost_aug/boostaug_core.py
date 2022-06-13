@@ -750,7 +750,7 @@ class TCBoostAug:
     def load_augmentor(self, arg):
         if isinstance(arg, TextClassifier):
             self.text_classifier = arg
-            if hasattr(SentimentClassifier, 'MLM') and hasattr(SentimentClassifier, 'tokenizer'):
+            if hasattr(TextClassifier, 'MLM') and hasattr(TextClassifier, 'tokenizer'):
                 self.MLM, self.tokenizer = self.text_classifier.MLM, self.text_classifier.tokenizer
             else:
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
@@ -1275,7 +1275,7 @@ class TADBoostAug:
 
     def get_mlm_and_tokenizer(self, text_classifier, config):
 
-        if isinstance(text_classifier, TextClassifier):
+        if isinstance(text_classifier, TADTextClassifier):
             base_model = text_classifier.model.bert.base_model
         else:
             base_model = text_classifier.bert.base_model
@@ -1307,7 +1307,7 @@ class TADBoostAug:
     def load_augmentor(self, arg):
         if isinstance(arg, TADTextClassifier):
             self.tad_classifier = arg
-            if hasattr(SentimentClassifier, 'MLM') and hasattr(SentimentClassifier, 'tokenizer'):
+            if hasattr(TADTextClassifier, 'MLM') and hasattr(TADTextClassifier, 'tokenizer'):
                 self.MLM, self.tokenizer = self.tad_classifier.MLM, self.tad_classifier.tokenizer
             else:
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
@@ -1794,9 +1794,9 @@ def post_clean(dataset_path):
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
     # # download from local ABSADatasets
+    if os.path.exists('integrated_datasets'):
+        shutil.move('integrated_datasets', 'source_datasets.backup')
 
-    # download_datasets_from_github()
-    # shutil.move('integrated_datasets', 'source_datasets')
     backup_datasets_dir = find_dir('source_datasets.backup', key=[dataset, task], disable_alert=True, recursive=True)
 
     datasets_dir = backup_datasets_dir.replace('source_datasets.backup', 'integrated_datasets')
