@@ -92,7 +92,7 @@ for dataset in [
         tc_config.model = BERTTCModelList.BERT  # 'BERT' model can be used for DeBERTa or BERT
         tc_config.num_epoch = 15
         tc_config.evaluate_begin = 0
-        tc_config.max_seq_len = 512
+        tc_config.max_seq_len = 200
         tc_config.pretrained_bert = 'microsoft/deberta-v3-base'
         tc_config.log_step = -1
         tc_config.dropout = 0.1
@@ -107,21 +107,21 @@ for dataset in [
                                        WINNER_NUM_PER_CASE=8,
                                        AUGMENT_NUM_PER_CASE=16,
                                        device=device)
-        # BoostingAugmenter.tc_boost_augment(tc_config,
-        #                                    dataset,
-        #                                    train_after_aug=True,
-        #                                    rewrite_cache=True,
-        #                                    )
+        BoostingAugmenter.tc_boost_augment(tc_config,
+                                           dataset,
+                                           train_after_aug=True,
+                                           rewrite_cache=True,
+                                           )
         # BoostingAugmenter.tc_classic_boost_training(tc_config,
         #                                            dataset,
         #                                            train_after_aug=True,
         #                                            rewrite_cache=True,
         #                                            )
-        BoostingAugmenter.tc_mono_augment(tc_config,
-                                                   dataset,
-                                                   train_after_aug=True,
-                                                   rewrite_cache=True,
-                                                   )
+        # BoostingAugmenter.tc_mono_augment(tc_config,
+        #                                   dataset,
+        #                                   train_after_aug=True,
+        #                                   rewrite_cache=True,
+        #                                   )
         # BoostingAugmenter.tc_boost_free_training(tc_config,
         #                                            dataset
         #                                            )

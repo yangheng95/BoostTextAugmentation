@@ -6,13 +6,16 @@ import os
 import numpy as np
 import torch
 import tqdm
+from autocuda import auto_cuda
+from pyabsa.core.tad.classic.__bert__ import TADBERT
+from pyabsa.core.tad.prediction.tad_classifier import TADTextClassifier
+from pyabsa.core.tc.prediction.text_classifier import TextClassifier
 
 from boost_aug import __version__
 
 from findfile import find_cwd_files, find_cwd_dir, find_dir, find_files, find_dirs, find_file
-from pyabsa import APCCheckpointManager, APCModelList, TCCheckpointManager, BERTTCModelList, TCDatasetList, TCConfigManager, APCConfigManager
+from pyabsa import APCCheckpointManager, APCModelList, TCCheckpointManager, BERTTCModelList, TCDatasetList, TCConfigManager, APCConfigManager, TADConfigManager, TADCheckpointManager
 from pyabsa.core.apc.prediction.sentiment_classifier import SentimentClassifier
-from pyabsa.functional.dataset.dataset_manager import download_datasets_from_github
 
 from termcolor import colored
 
@@ -22,7 +25,8 @@ from pyabsa.functional.dataset import DatasetItem
 from pyabsa import ABSADatasetList
 
 from transformers import BertForMaskedLM, DebertaV2ForMaskedLM, AutoConfig, AutoTokenizer, RobertaForMaskedLM
-
+import tempfile
+import git
 
 
 def rename(src, tgt):
@@ -37,23 +41,6 @@ def remove(p):
     if os.path.exists(p):
         os.remove(p)
 
-
-def get_mlm_and_tokenizer(sent_classifier, config):
-    if isinstance(sent_classifier, SentimentClassifier):
-        base_model = sent_classifier.model.bert.base_model
-    else:
-        base_model = sent_classifier.bert.base_model
-    pretrained_config = AutoConfig.from_pretrained(config.pretrained_bert)
-    if 'deberta-v3' in config.pretrained_bert:
-        MLM = DebertaV2ForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
-        MLM.deberta = base_model
-    elif 'roberta' in config.pretrained_bert:
-        MLM = RobertaForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
-        MLM.roberta = base_model
-    else:
-        MLM = BertForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
-        MLM.bert = base_model
-    return MLM, AutoTokenizer.from_pretrained(config.pretrained_bert)
 
 
 class AugmentBackend:
@@ -140,14 +127,50 @@ class ABSCBoostAug:
             elif self.AUGMENT_BACKEND in 'SpellingAug':
                 self.augmenter = naw.SpellingAug()
 
-    def load_augmentor(self, ckpt_path_or_dataset_name):
+    def get_mlm_and_tokenizer(self, sent_classifier, config):
+
+        if isinstance(sent_classifier, SentimentClassifier):
+            base_model = sent_classifier.model.bert.base_model
+        else:
+            base_model = sent_classifier.bert.base_model
+        pretrained_config = AutoConfig.from_pretrained(config.pretrained_bert)
+        try:
+            if 'deberta-v3' in config.pretrained_bert:
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
+                MLM.deberta = base_model
+            elif 'roberta' in config.pretrained_bert:
+                MLM = RobertaForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
+                MLM.roberta = base_model
+            else:
+                MLM = BertForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
+                MLM.bert = base_model
+        except Exception as e:
+            self.device = auto_cuda()
+            if 'deberta-v3' in config.pretrained_bert:
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(self.device)
+                MLM.deberta = base_model
+            elif 'roberta' in config.pretrained_bert:
+                MLM = RobertaForMaskedLM(pretrained_config).to(self.device)
+                MLM.roberta = base_model
+            else:
+                MLM = BertForMaskedLM(pretrained_config).to(self.device)
+                MLM.bert = base_model
+
+        return MLM, AutoTokenizer.from_pretrained(config.pretrained_bert)
+
+    def load_augmentor(self, arg):
+        if isinstance(arg, SentimentClassifier):
+            self.sent_classifier = arg
+            if hasattr(SentimentClassifier, 'MLM') and hasattr(SentimentClassifier, 'tokenizer'):
+                self.MLM, self.tokenizer = self.sent_classifier.MLM, self.sent_classifier.tokenizer
+            else:
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
         if not hasattr(self, 'sent_classifier'):
             try:
-                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(ckpt_path_or_dataset_name, auto_device=self.device)
-                self.sent_classifier.opt.eval_batch_size = 128
-                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
+                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, auto_device=self.device)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
             except:
-                keys = ['checkpoint', 'mono_boost', 'fast_lcf_bert', 'deberta', ckpt_path_or_dataset_name]
+                keys = ['checkpoint', 'mono_boost', 'deberta', arg]
 
                 checkpoint_path = ''
                 max_f1 = ''
@@ -155,15 +178,12 @@ class ABSCBoostAug:
                     if 'f1' in path and path[path.index('f1'):] > max_f1:
                         max_f1 = max(path[path.index('f1'):], checkpoint_path)
                         checkpoint_path = path
-
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
+                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, auto_device=self.device)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
 
-                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(checkpoint_path, auto_device=self.device)
-                self.sent_classifier.opt.eval_batch_size = 128
-                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
-
-    def single_augment(self, text, aspect, label, num=3, dataset=''):
+    def single_augment(self, text, aspect, label, num=3):
 
         if self.AUGMENT_BACKEND in 'EDA':
             raw_augs = self.augmenter.augment(text)
@@ -383,7 +403,7 @@ class ABSCBoostAug:
 
             self.sent_classifier.opt.eval_batch_size = 128
 
-            self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.sent_classifier, _config)
+            self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, _config)
 
             dataset_files = detect_dataset(dataset, task)
             boost_sets = dataset_files['valid']
@@ -424,7 +444,7 @@ class ABSCBoostAug:
                                 results = self.sent_classifier.infer(_text, print_result=False)
                             except:
                                 continue
-                            ids = self.tokenizer(text.replace('PLACEHOLDER', '{}'.format(lines[i + 1])), return_tensors="pt")
+                            ids = self.tokenizer(text, return_tensors="pt")
                             ids['labels'] = ids['input_ids'].clone()
                             ids = ids.to(self.device)
                             loss = self.MLM(**ids)['loss']
@@ -483,8 +503,8 @@ class ABSCBoostAug:
 
             post_clean(os.path.dirname(dataset_file))
 
-        for f in find_cwd_files('.ignore'):
-            rename(f, f.replace('.ignore', ''))
+        for f in find_cwd_files('.augment.ignore'):
+            rename(f, f.replace('.augment.ignore', ''))
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
@@ -538,7 +558,7 @@ class ABSCBoostAug:
 
             self.sent_classifier.opt.eval_batch_size = 128
 
-            self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.sent_classifier, _config)
+            self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, _config)
 
             dataset_files = detect_dataset(dataset, task)
             boost_sets = dataset_files['train']
@@ -576,7 +596,7 @@ class ABSCBoostAug:
                                 results = self.sent_classifier.infer(_text, print_result=False)
                             except:
                                 continue
-                            ids = self.tokenizer(text.replace('PLACEHOLDER', '{}'.format(lines[i + 1])), return_tensors="pt")
+                            ids = self.tokenizer(text, return_tensors="pt")
                             ids['labels'] = ids['input_ids'].clone()
                             ids = ids.to(self.device)
                             loss = self.MLM(**ids)['loss']
@@ -610,8 +630,8 @@ class ABSCBoostAug:
 
             post_clean(os.path.dirname(boost_set))
 
-        for f in find_cwd_files('.ignore'):
-            rename(f, f.replace('.ignore', ''))
+        for f in find_cwd_files('.augment.ignore'):
+            rename(f, f.replace('.augment.ignore', ''))
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
@@ -696,14 +716,50 @@ class TCBoostAug:
             elif self.AUGMENT_BACKEND in 'SpellingAug':
                 self.augmenter = naw.SpellingAug()
 
-    def load_augmentor(self, ckpt_path_or_dataset_name):
+    def get_mlm_and_tokenizer(self, text_classifier, config):
+
+        if isinstance(text_classifier, TextClassifier):
+            base_model = text_classifier.model.bert.base_model
+        else:
+            base_model = text_classifier.bert.base_model
+        pretrained_config = AutoConfig.from_pretrained(config.pretrained_bert)
+        try:
+            if 'deberta-v3' in config.pretrained_bert:
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM.deberta = base_model
+            elif 'roberta' in config.pretrained_bert:
+                MLM = RobertaForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM.roberta = base_model
+            else:
+                MLM = BertForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM.bert = base_model
+        except Exception as e:
+            self.device = auto_cuda()
+            if 'deberta-v3' in config.pretrained_bert:
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(self.device)
+                MLM.deberta = base_model
+            elif 'roberta' in config.pretrained_bert:
+                MLM = RobertaForMaskedLM(pretrained_config).to(self.device)
+                MLM.roberta = base_model
+            else:
+                MLM = BertForMaskedLM(pretrained_config).to(self.device)
+                MLM.bert = base_model
+
+        return MLM, AutoTokenizer.from_pretrained(config.pretrained_bert)
+    
+    def load_augmentor(self, arg):
+        if isinstance(arg, TextClassifier):
+            self.text_classifier = arg
+            if hasattr(SentimentClassifier, 'MLM') and hasattr(SentimentClassifier, 'tokenizer'):
+                self.MLM, self.tokenizer = self.text_classifier.MLM, self.text_classifier.tokenizer
+            else:
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
         if not hasattr(self, 'text_classifier'):
             try:
-                self.text_classifier = TCCheckpointManager.get_text_classifier(ckpt_path_or_dataset_name, auto_device=self.device)
-                self.text_classifier.opt.eval_batch_size = 128
-                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
+                self.text_classifier = TCCheckpointManager.get_text_classifier(arg, auto_device=self.device)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
             except:
-                keys = ['checkpoint', 'mono_boost', 'deberta', ckpt_path_or_dataset_name]
+                keys = ['checkpoint', 'mono_boost', 'deberta', arg]
 
                 checkpoint_path = ''
                 max_f1 = ''
@@ -711,13 +767,10 @@ class TCBoostAug:
                     if 'f1' in path and path[path.index('f1'):] > max_f1:
                         max_f1 = max(path[path.index('f1'):], checkpoint_path)
                         checkpoint_path = path
-                checkpoint_path = '{}'.format(ckpt_path_or_dataset_name)
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
-                self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
-                self.text_classifier.opt.eval_batch_size = 128
-                self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
-
+                self.text_classifier = TCCheckpointManager.get_text_classifier(arg, auto_device=self.device)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
 
     def single_augment(self, text, label, num=3):
 
@@ -735,7 +788,7 @@ class TCBoostAug:
                     results = self.text_classifier.infer(text + '!ref!{}'.format(label), print_result=False)
                 except:
                     continue
-                ids = self.tokenizer(text + '$!ref!{}'.format(label), return_tensors="pt")
+                ids = self.tokenizer(text, return_tensors="pt")
                 ids['labels'] = ids['input_ids'].clone()
                 ids = ids.to(self.device)
                 loss = self.MLM(**ids)['loss']
@@ -929,7 +982,7 @@ class TCBoostAug:
             self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
             self.text_classifier.opt.eval_batch_size = 128
 
-            self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.text_classifier, _config)
+            self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, _config)
 
             dataset_files = detect_dataset(dataset, task)
             boost_sets = dataset_files['valid']
@@ -963,7 +1016,7 @@ class TCBoostAug:
                                     results = self.text_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
                                 except:
                                     continue
-                                ids = self.tokenizer(text.replace('PLACEHOLDER', '{}'.format(label)), return_tensors="pt")
+                                ids = self.tokenizer(text, return_tensors="pt")
                                 ids['labels'] = ids['input_ids'].clone()
                                 ids = ids.to(self.device)
                                 loss = self.MLM(**ids)['loss']
@@ -1010,8 +1063,8 @@ class TCBoostAug:
 
             post_clean(os.path.dirname(dataset_file))
 
-        for f in find_cwd_files('.ignore'):
-            rename(f, f.replace('.ignore', ''))
+        for f in find_cwd_files('.augment.ignore'):
+            rename(f, f.replace('.augment.ignore', ''))
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
@@ -1065,7 +1118,7 @@ class TCBoostAug:
 
             self.text_classifier.opt.eval_batch_size = 128
 
-            self.MLM, self.tokenizer = get_mlm_and_tokenizer(self.text_classifier, _config)
+            self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, _config)
 
             dataset_files = detect_dataset(dataset, task)
             boost_sets = dataset_files['train']
@@ -1099,7 +1152,7 @@ class TCBoostAug:
                                     results = self.text_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
                                 except:
                                     continue
-                                ids = self.tokenizer(text.replace('PLACEHOLDER', '{}'.format(label)), return_tensors="pt")
+                                ids = self.tokenizer(text, return_tensors="pt")
                                 ids['labels'] = ids['input_ids'].clone()
                                 ids = ids.to(self.device)
                                 loss = self.MLM(**ids)['loss']
@@ -1134,8 +1187,561 @@ class TCBoostAug:
 
             post_clean(os.path.dirname(boost_set))
 
-        for f in find_cwd_files('.ignore'):
+        for f in find_cwd_files('.augment.ignore'):
+            rename(f, f.replace('.augment.ignore', ''))
+
+        if train_after_aug:
+            print(colored('Start mono boosting augment...', 'yellow'))
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=0,  # =None to avoid save model
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
+
+
+class TADBoostAug:
+
+    def __init__(self,
+                 ROOT: str = '',
+                 BOOSTING_FOLD=5,
+                 CLASSIFIER_TRAINING_NUM=2,
+                 CONFIDENCE_THRESHOLD=0.99,
+                 AUGMENT_NUM_PER_CASE=10,
+                 WINNER_NUM_PER_CASE=10,
+                 PERPLEXITY_THRESHOLD=4,
+                 AUGMENT_PCT=0.1,
+                 AUGMENT_BACKEND=AugmentBackend.EDA,
+                 USE_CONFIDENCE=True,
+                 USE_PERPLEXITY=True,
+                 USE_LABEL=True,
+                 device='cuda'
+                 ):
+        """
+
+        :param ROOT: The path to save intermediate checkpoint
+        :param BOOSTING_FOLD: Number of splits in crossing boosting augment
+        :param CLASSIFIER_TRAINING_NUM: Number of pre-trained inference model using for confidence calculation
+        :param CONFIDENCE_THRESHOLD: Confidence threshold used for augmentations filtering
+        :param AUGMENT_NUM_PER_CASE: Number of augmentations per example
+        :param WINNER_NUM_PER_CASE: Number of selected augmentations per example in confidence ranking
+        :param PERPLEXITY_THRESHOLD: Perplexity threshold used for augmentations filtering
+        :param AUGMENT_PCT: Word change probability used in backend augment method
+        :param AUGMENT_BACKEND: Augmentation backend used for augmentations generation, e.g., EDA, ContextualWordEmbsAug
+        """
+
+        assert hasattr(AugmentBackend, AUGMENT_BACKEND)
+        if not ROOT or not os.path.exists(ROOT):
+            self.ROOT = os.getenv('$HOME') if os.getenv('$HOME') else os.getcwd()
+        else:
+            self.ROOT = ROOT
+
+        self.BOOSTING_FOLD = BOOSTING_FOLD
+        self.CLASSIFIER_TRAINING_NUM = CLASSIFIER_TRAINING_NUM
+        self.CONFIDENCE_THRESHOLD = CONFIDENCE_THRESHOLD
+        self.AUGMENT_NUM_PER_CASE = AUGMENT_NUM_PER_CASE if AUGMENT_NUM_PER_CASE > 0 else 1
+        self.WINNER_NUM_PER_CASE = WINNER_NUM_PER_CASE
+        self.PERPLEXITY_THRESHOLD = PERPLEXITY_THRESHOLD
+        self.AUGMENT_PCT = AUGMENT_PCT
+        self.AUGMENT_BACKEND = AUGMENT_BACKEND
+        self.USE_CONFIDENCE = USE_CONFIDENCE
+        self.USE_PERPLEXITY = USE_PERPLEXITY
+        self.USE_LABEL = USE_LABEL
+        self.device = device
+
+        if self.AUGMENT_BACKEND in 'EDA':
+            # Here are some augmenters from https://github.com/QData/TextAttack
+            from textattack.augmentation import EasyDataAugmenter as Aug
+            # Alter default values if desired
+            self.augmenter = Aug(pct_words_to_swap=self.AUGMENT_PCT, transformations_per_example=self.AUGMENT_NUM_PER_CASE)
+        else:
+            # Here are some augmenters from https://github.com/makcedward/nlpaug
+            import nlpaug.augmenter.word as naw
+            if self.AUGMENT_BACKEND in 'ContextualWordEmbsAug':
+                self.augmenter = naw.ContextualWordEmbsAug(
+                    model_path='roberta-base', action="substitute", aug_p=self.AUGMENT_PCT, device=self.device)
+            elif self.AUGMENT_BACKEND in 'RandomWordAug':
+                self.augmenter = naw.RandomWordAug(action="swap")
+            elif self.AUGMENT_BACKEND in 'AntonymAug':
+                self.augmenter = naw.AntonymAug()
+            elif self.AUGMENT_BACKEND in 'SplitAug':
+                self.augmenter = naw.SplitAug()
+            elif self.AUGMENT_BACKEND in 'BackTranslationAug':
+                self.augmenter = naw.BackTranslationAug(from_model_name='facebook/wmt19-en-de',
+                                                        to_model_name='facebook/wmt19-de-en',
+                                                        device=self.device
+                                                        )
+            elif self.AUGMENT_BACKEND in 'SpellingAug':
+                self.augmenter = naw.SpellingAug()
+
+    def get_mlm_and_tokenizer(self, text_classifier, config):
+
+        if isinstance(text_classifier, TextClassifier):
+            base_model = text_classifier.model.bert.base_model
+        else:
+            base_model = text_classifier.bert.base_model
+        pretrained_config = AutoConfig.from_pretrained(config.pretrained_bert)
+        try:
+            if 'deberta-v3' in config.pretrained_bert:
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM.deberta = base_model
+            elif 'roberta' in config.pretrained_bert:
+                MLM = RobertaForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM.roberta = base_model
+            else:
+                MLM = BertForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM.bert = base_model
+        except Exception as e:
+            self.device = auto_cuda()
+            if 'deberta-v3' in config.pretrained_bert:
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(self.device)
+                MLM.deberta = base_model
+            elif 'roberta' in config.pretrained_bert:
+                MLM = RobertaForMaskedLM(pretrained_config).to(self.device)
+                MLM.roberta = base_model
+            else:
+                MLM = BertForMaskedLM(pretrained_config).to(self.device)
+                MLM.bert = base_model
+
+        return MLM, AutoTokenizer.from_pretrained(config.pretrained_bert)
+
+    def load_augmentor(self, arg):
+        if isinstance(arg, TADTextClassifier):
+            self.tad_classifier = arg
+            if hasattr(SentimentClassifier, 'MLM') and hasattr(SentimentClassifier, 'tokenizer'):
+                self.MLM, self.tokenizer = self.tad_classifier.MLM, self.tad_classifier.tokenizer
+            else:
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
+        if not hasattr(self, 'tad_classifier'):
+            try:
+                self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(arg, auto_device=self.device)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
+            except:
+                keys = ['checkpoint', 'mono_boost', 'deberta', arg]
+
+                checkpoint_path = ''
+                max_f1 = ''
+                for path in find_dirs(self.ROOT, keys):
+                    if 'f1' in path and path[path.index('f1'):] > max_f1:
+                        max_f1 = max(path[path.index('f1'):], checkpoint_path)
+                        checkpoint_path = path
+                if not checkpoint_path:
+                    raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
+                self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, auto_device=self.device)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
+
+    def single_augment(self, text, label, num=3):
+
+        if self.AUGMENT_BACKEND in 'EDA':
+            raw_augs = self.augmenter.augment(text)
+        else:
+            raw_augs = self.augmenter.augment(text, n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+
+        if isinstance(raw_augs, str):
+            raw_augs = [raw_augs]
+        augs = {}
+        for text in raw_augs:
+            with torch.no_grad():
+                try:
+                    results = self.tad_classifier.infer(text + '!ref!{},-100,-100'.format(label), print_result=False, attack_defense=False)
+                except Exception as e:
+                    raise e
+                ids = self.tokenizer(text, return_tensors="pt")
+                ids['labels'] = ids['input_ids'].clone()
+                ids = ids.to(self.device)
+                loss = self.MLM(**ids)['loss']
+                perplexity = torch.exp(loss / ids['input_ids'].size(1))
+
+                if self.USE_LABEL:
+                    if results['ref_label_check'] != 'Correct':
+                        continue
+
+                if self.USE_CONFIDENCE:
+                    if results['confidence'] <= self.CONFIDENCE_THRESHOLD:
+                        continue
+
+                augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$LABEL$')]
+
+        if self.USE_CONFIDENCE:
+            key_rank = sorted(augs.keys())
+        else:
+            key_rank = list(augs.keys())
+        augmentations = []
+        for key in key_rank[:num]:
+            if self.USE_PERPLEXITY:
+                if key < self.PERPLEXITY_THRESHOLD:
+                    augmentations += augs[key]
+
+        return augmentations
+
+    def get_tad_config(self, config):
+        config.BOOSTING_FOLD = self.BOOSTING_FOLD
+        config.CLASSIFIER_TRAINING_NUM = self.CLASSIFIER_TRAINING_NUM
+        config.CONFIDENCE_THRESHOLD = self.CONFIDENCE_THRESHOLD
+        config.AUGMENT_NUM_PER_CASE = self.AUGMENT_NUM_PER_CASE
+        config.WINNER_NUM_PER_CASE = self.WINNER_NUM_PER_CASE
+        config.PERPLEXITY_THRESHOLD = self.PERPLEXITY_THRESHOLD
+        config.AUGMENT_PCT = self.AUGMENT_PCT
+        config.AUGMENT_TOOL = self.AUGMENT_BACKEND
+        config.BoostAugVersion = __version__
+        tad_config_english = TADConfigManager.get_tad_config_english()
+        tad_config_english.max_seq_len = 80
+        tad_config_english.dropout = 0
+        tad_config_english.model = TADBERT
+        tad_config_english.pretrained_bert = 'microsoft/deberta-v3-base'
+        tad_config_english.optimizer = 'adamw'
+        tad_config_english.cache_dataset = False
+        tad_config_english.patience = 10
+        tad_config_english.log_step = -1
+        tad_config_english.learning_rate = 1e-5
+        tad_config_english.batadh_size = 16
+        tad_config_english.num_epoch = 10
+        tad_config_english.evaluate_begin = 0
+        tad_config_english.l2reg = 1e-8
+        tad_config_english.cross_validate_fold = -1  # disable cross_validate
+        tad_config_english.seed = [random.randint(0, 10000) for _ in range(self.CLASSIFIER_TRAINING_NUM)]
+        return tad_config_english
+
+    def tad_classic_augment(self, config: ConfigManager,
+                            dataset: DatasetItem,
+                            rewrite_cache=True,
+                            task='text_defense',
+                            train_after_aug=False
+                            ):
+        if not isinstance(dataset, DatasetItem):
+            dataset = DatasetItem(dataset)
+        _config = self.get_tad_config(config)
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+        if rewrite_cache:
+            prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
+
+        train_data = []
+        for dataset_file in detect_dataset(dataset, task)['train']:
+            print('processing {}'.format(dataset_file))
+            fin = open(dataset_file, encoding='utf8', mode='r')
+            lines = fin.readlines()
+            fin.close()
+            for i in tqdm.tqdm(range(0, len(lines))):
+                lines[i] = lines[i].strip()
+                train_data.append([lines[i]])
+
+        if self.WINNER_NUM_PER_CASE:
+
+            fout_aug_train = open('{}/classic.train.{}.augment'.format(os.path.dirname(dataset_file), tag), encoding='utf8', mode='w')
+
+            for item in tqdm.tqdm(train_data, postfix='Classic Augmenting...'):
+
+                item[0] = item[0].replace('$LABEL$', 'PLACEHOLDER')
+                label = item[0].split('PLACEHOLDER')[1].strip()
+
+                if self.AUGMENT_BACKEND in 'EDA':
+                    augs = self.augmenter.augment(item[0])
+                else:
+                    augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+
+                if isinstance(augs, str):
+                    augs = [augs]
+                for aug in augs:
+                    if aug.endswith('PLACEHOLDER {}'.format(label)) or aug.endswith('PLACEHOLDER{}'.format(label)):
+                        _text = aug.replace('PLACEHOLDER', '$LABEL$')
+                        fout_aug_train.write(_text + '\n')
+
+            fout_aug_train.close()
+
+        post_clean(os.path.dirname(dataset_file))
+
+        if train_after_aug:
+            print(colored('Start classic augment training...', 'cyan'))
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           ).load_trained_model()
+
+    def tad_boost_augment(self, config: ConfigManager,
+                          dataset: DatasetItem,
+                          rewrite_cache=True,
+                          task='text_defense',
+                          train_after_aug=False
+                          ):
+        if not isinstance(dataset, DatasetItem):
+            dataset = DatasetItem(dataset)
+        _config = self.get_tad_config(config)
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
+
+        for valid_file in detect_dataset(dataset, task)['valid']:
+            rename(valid_file, valid_file + '.ignore')
+
+        data = []
+        dataset_file = ''
+        dataset_files = detect_dataset(dataset, task)['train']
+
+        for dataset_file in dataset_files:
+            print('processing {}'.format(dataset_file))
+            fin = open(dataset_file, encoding='utf8', mode='r')
+            lines = fin.readlines()
+            fin.close()
+            rename(dataset_file, dataset_file + '.ignore')
+            for i in tqdm.tqdm(range(0, len(lines))):
+                lines[i] = lines[i].strip()
+
+                data.append([lines[i]])
+
+        train_data = data
+        len_per_fold = len(train_data) // self.BOOSTING_FOLD + 1
+        folds = [train_data[i: i + len_per_fold] for i in range(0, len(train_data), len_per_fold)]
+
+        if not os.path.exists('checkpoints/cross_boost/{}_{}'.format(config.model.__name__.lower(), dataset.dataset_name)):
+            os.makedirs('checkpoints/cross_boost/{}_{}'.format(config.model.__name__.lower(), dataset.dataset_name))
+
+        for fold_id, b_idx in enumerate(range(len(folds))):
+            print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
+            train_data = list(itertools.chain(*[x for i, x in enumerate(folds) if i != b_idx]))
+            valid_data = folds[b_idx]
+
+            fout_train = open('{}/train.dat.tmp'.format(os.path.dirname(dataset_file), fold_id), encoding='utf8', mode='w')
+            fout_boost = open('{}/valid.dat.tmp'.format(os.path.dirname(dataset_file), fold_id), encoding='utf8', mode='w')
+            for case in train_data:
+                for line in case:
+                    fout_train.write(line + '\n')
+
+            for case in valid_data:
+                for line in case:
+                    fout_boost.write(line + '\n')
+
+            fout_train.close()
+            fout_boost.close()
+
+            keys = ['checkpoint', 'cross_boost', dataset.dataset_name, 'deberta', 'No.{}'.format(b_idx + 1)]
+
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
+                Trainer(config=_config,
+                        dataset=dataset,  # train set and test set will be automatically detected
+                        checkpoint_save_mode=1,
+                        path_to_save='checkpoints/cross_boost/{}/No.{}'.format(tag, b_idx + 1),
+                        auto_device=self.device  # automatic choose CUDA or CPU
+                        )
+
+            torch.cuda.empty_cache()
+            time.sleep(5)
+
+            checkpoint_path = ''
+            max_f1 = ''
+            for path in find_dirs(self.ROOT, keys):
+                if 'f1' in path and path[path.index('f1'):] > max_f1:
+                    max_f1 = max(path[path.index('f1'):], checkpoint_path)
+                    checkpoint_path = path
+
+            self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, auto_device=self.device)
+
+
+            self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, _config)
+
+            dataset_files = detect_dataset(dataset, task)
+            boost_sets = dataset_files['valid']
+            augmentations = []
+            perplexity_list = []
+            confidence_list = []
+
+            for boost_set in boost_sets:
+                print('Augmenting -> {}'.format(boost_set))
+                fin = open(boost_set, encoding='utf8', mode='r')
+                lines = fin.readlines()
+                fin.close()
+                remove(boost_set)
+                for i in tqdm.tqdm(range(0, len(lines)), postfix='No.{} Augmenting...'.format(b_idx + 1)):
+
+                    lines[i] = lines[i].strip().replace('$LABEL$', 'PLACEHOLDER')
+                    label = lines[i].split('PLACEHOLDER')[1].strip()
+
+                    if self.AUGMENT_BACKEND in 'EDA':
+                        raw_augs = self.augmenter.augment(lines[i])
+                    else:
+                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+
+                    if isinstance(raw_augs, str):
+                        raw_augs = [raw_augs]
+                    augs = {}
+                    for text in raw_augs:
+                        if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
+                            with torch.no_grad():
+                                try:
+                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), attack_defense=False, ignore_error=False, print_result=False)
+                                except Exception as e:
+                                    continue
+                                ids = self.tokenizer(text, return_tensors="pt")
+                                ids['labels'] = ids['input_ids'].clone()
+                                ids = ids.to(self.device)
+                                loss = self.MLM(**ids)['loss']
+                                perplexity = torch.exp(loss / ids['input_ids'].size(1))
+
+                                perplexity_list.append(perplexity.item())
+                                confidence_list.append(results['confidence'])
+                                if self.USE_LABEL:
+                                    if results['ref_label_check'] != 'Correct':
+                                        continue
+
+                                if self.USE_CONFIDENCE:
+                                    if results['confidence'] <= self.CONFIDENCE_THRESHOLD:
+                                        continue
+
+                                augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$LABEL$')]
+
+                    if self.USE_CONFIDENCE:
+                        key_rank = sorted(augs.keys())
+                    else:
+                        key_rank = list(augs.keys())
+                    for key in key_rank[:self.WINNER_NUM_PER_CASE]:
+                        if self.USE_PERPLEXITY:
+                            if key < self.PERPLEXITY_THRESHOLD:
+                                augmentations += augs[key]
+                        else:
+                            augmentations += augs[key]
+
+            print('Avg Confidence: {} Max Confidence: {} Min Confidence: {}'.format(np.average(confidence_list), max(confidence_list), min(confidence_list)))
+
+            print('Avg Perplexity: {} Max Perplexity: {} Min Perplexity: {}'.format(np.average(perplexity_list), max(perplexity_list), min(perplexity_list)))
+
+            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
+
+            for line in augmentations:
+                fout.write(line + '\n')
+            fout.close()
+
+            del self.tad_classifier
+            del self.MLM
+
+            torch.cuda.empty_cache()
+            time.sleep(5)
+
+            post_clean(os.path.dirname(dataset_file))
+
+        for f in find_cwd_files('.augment.ignore'):
             rename(f, f.replace('.ignore', ''))
+
+        if train_after_aug:
+            print(colored('Start cross boosting augment...', 'green'))
+            return Trainer(config=config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=0,  # =None to avoid save model
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
+
+    def tad_mono_augment(self, config: ConfigManager,
+                         dataset: DatasetItem,
+                         rewrite_cache=True,
+                         task='text_defense',
+                         train_after_aug=False
+                         ):
+        if not isinstance(dataset, DatasetItem):
+            dataset = DatasetItem(dataset)
+        _config = self.get_tad_config(config)
+        tag = '{}_{}_{}'.format(_config.model.__name__.lower(), dataset.dataset_name, os.path.basename(_config.pretrained_bert))
+
+        prepare_dataset_and_clean_env(dataset.dataset_name, task, rewrite_cache)
+
+        if not os.path.exists('checkpoints/mono_boost/{}'.format(tag)):
+            os.makedirs('checkpoints/mono_boost/{}'.format(tag))
+
+        print(colored('Begin mono boosting... ', 'yellow'))
+        if self.WINNER_NUM_PER_CASE:
+
+            keys = ['checkpoint', 'mono_boost', dataset.dataset_name, 'deberta']
+
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
+                # _config.log_step = -1
+                Trainer(config=_config,
+                        dataset=dataset,  # train set and test set will be automatically detected
+                        checkpoint_save_mode=1,
+                        path_to_save='checkpoints/mono_boost/{}/'.format(tag),
+                        auto_device=self.device  # automatic choose CUDA or CPU
+                        )
+
+            torch.cuda.empty_cache()
+            time.sleep(5)
+
+            checkpoint_path = ''
+            max_f1 = ''
+            for path in find_dirs(self.ROOT, keys):
+                if 'f1' in path and path[path.index('f1'):] > max_f1:
+                    max_f1 = max(path[path.index('f1'):], checkpoint_path)
+                    checkpoint_path = path
+
+            self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, auto_device=self.device)
+
+            self.tad_classifier.opt.eval_batch_size = 128
+
+            self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, _config)
+
+            dataset_files = detect_dataset(dataset, task)
+            boost_sets = dataset_files['train']
+            augmentations = []
+            perplexity_list = []
+            confidence_list = []
+
+            for boost_set in boost_sets:
+                print('Augmenting -> {}'.format(boost_set))
+                fin = open(boost_set, encoding='utf8', mode='r')
+                lines = fin.readlines()
+                fin.close()
+                # remove(boost_set)
+                for i in tqdm.tqdm(range(0, len(lines)), postfix='Mono Augmenting...'):
+
+                    lines[i] = lines[i].strip().replace('$LABEL$', 'PLACEHOLDER')
+                    label = lines[i].split('PLACEHOLDER')[1].strip()
+
+                    if self.AUGMENT_BACKEND in 'EDA':
+                        raw_augs = self.augmenter.augment(lines[i])
+                    else:
+                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+
+                    if isinstance(raw_augs, str):
+                        raw_augs = [raw_augs]
+                    augs = {}
+                    for text in raw_augs:
+                        if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
+                            with torch.no_grad():
+                                try:
+                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), attack_defense=False, print_result=False)
+                                except:
+                                    continue
+                                ids = self.tokenizer(text, return_tensors="pt")
+                                ids['labels'] = ids['input_ids'].clone()
+                                ids = ids.to(self.device)
+                                loss = self.MLM(**ids)['loss']
+                                perplexity = torch.exp(loss / ids['input_ids'].size(1))
+
+                                perplexity_list.append(perplexity.item())
+                                confidence_list.append(results['confidence'])
+
+                                if results['ref_label_check'] == 'Correct' and results['confidence'] > self.CONFIDENCE_THRESHOLD:
+                                    augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$LABEL$')]
+
+                    key_rank = sorted(augs.keys())
+                    for key in key_rank[:self.WINNER_NUM_PER_CASE]:
+                        if key < self.PERPLEXITY_THRESHOLD:
+                            augmentations += augs[key]
+
+            print('Avg Confidence: {} Max Confidence: {} Min Confidence: {}'.format(np.average(confidence_list), max(confidence_list), min(confidence_list)))
+
+            print('Avg Perplexity: {} Max Perplexity: {} Min Perplexity: {}'.format(np.average(perplexity_list), max(perplexity_list), min(perplexity_list)))
+
+            fout = open('{}/{}.mono_boost.train.augment.ignore'.format(os.path.dirname(boost_set), tag), encoding='utf8', mode='w')
+
+            for line in augmentations:
+                fout.write(line + '\n')
+            fout.close()
+
+            del self.tad_classifier
+            del self.MLM
+
+            torch.cuda.empty_cache()
+            time.sleep(5)
+
+            post_clean(os.path.dirname(boost_set))
+
+        for f in find_cwd_files('.augment.ignore'):
+            rename(f, f.replace('.augment.ignore', ''))
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
@@ -1171,11 +1777,15 @@ def query_dataset_detail(dataset_name, task='text_classification'):
 
 
 def post_clean(dataset_path):
-    if os.path.exists('{}/train.dat.tmp'.format(dataset_path)):
-        remove('{}/train.dat.tmp'.format(dataset_path))
-    if os.path.exists('{}/valid.dat.tmp'.format(dataset_path)):
-        remove('{}/valid.dat.tmp'.format(dataset_path))
-    # for f in find_cwd_files('.tmp'):
+    # if os.path.exists('{}/train.dat.tmp'.format(dataset_path)):
+    #     remove('{}/train.dat.tmp'.format(dataset_path))
+    # if os.path.exists('{}/valid.dat.tmp'.format(dataset_path)):
+    #     remove('{}/valid.dat.tmp'.format(dataset_path))
+    for f in find_files(dataset_path, '.tmp'):
+        remove(f)
+        remove(f+'.ignore')
+
+    # for f in find_files(dataset_path, '.tmp.ignore', exclude_key='.augment.ignore'):
     #     remove(f)
 
     if find_cwd_dir('run'):
@@ -1183,26 +1793,36 @@ def post_clean(dataset_path):
 
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
-    download_datasets_from_github(os.getcwd())
-    datasets_dir = find_cwd_dir('integrated_datasets', task, dataset)
-    if rewrite_cache:
-        if datasets_dir:
-            shutil.rmtree(datasets_dir)
-        download_datasets_from_github(os.getcwd())
-        datasets_dir = find_cwd_dir('integrated_datasets', task, dataset)
+    # # download from local ABSADatasets
 
+    # download_datasets_from_github()
+    # shutil.move('integrated_datasets', 'source_datasets')
+    backup_datasets_dir = find_dir('source_datasets.backup', key=[dataset, task], disable_alert=True, recursive=True)
+
+    datasets_dir = backup_datasets_dir.replace('source_datasets.backup', 'integrated_datasets')
+    if not os.path.exists(datasets_dir):
+        os.makedirs(datasets_dir)
+
+    if rewrite_cache:
         print('Remove temp files (if any)')
         for f in find_files(datasets_dir, ['.augment']) + find_files(datasets_dir, ['.tmp']) + find_files(datasets_dir, ['.ignore']):
+            # for f in find_files(datasets_dir, ['.tmp']):
             remove(f)
-        # os.system('rm {}/valid.dat.tmp'.format(datasets_dir))
-        # os.system('rm {}/train.dat.tmp'.format(datasets_dir))
+        os.system('rm {}/valid.dat.tmp'.format(datasets_dir))
+        os.system('rm {}/train.dat.tmp'.format(datasets_dir))
         if find_cwd_dir(['run', dataset]):
             shutil.rmtree(find_cwd_dir(['run', dataset]))
 
         print('Remove Done')
 
+    for f in os.listdir(backup_datasets_dir):
+        if os.path.isfile(os.path.join(backup_datasets_dir, f)):
+            shutil.copyfile(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
+        elif os.path.isdir(os.path.join(backup_datasets_dir, f)):
+            shutil.copytree(os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f))
 
-filter_key_words = ['.py', '.ignore', '.md', 'readme', 'log', 'result', 'zip', '.state_dict', '.model', '.png', 'acc_', 'f1_', '.aug']
+
+filter_key_words = ['.py', '.ignore', '.md', 'readme', 'log', 'result', 'zip', '.state_dict', '.model', '.png', 'acc_', 'f1_', '.aug', '.backup', '.bak']
 
 
 def detect_dataset(dataset_path, task='apc'):
@@ -1212,15 +1832,16 @@ def detect_dataset(dataset_path, task='apc'):
     for d in dataset_path:
         if not os.path.exists(d) or hasattr(ABSADatasetList, d) or hasattr(TCDatasetList, d):
             print('Loading {} dataset'.format(d))
-            search_path = find_dir(os.getcwd(), [d, task, 'dataset'], exclude_key=['infer', 'test.'] + filter_key_words, disable_alert=False)
-            dataset_file['train'] += find_files(search_path, [d, 'train', task], exclude_key=['.inference', 'test.'] + filter_key_words)
-            dataset_file['test'] += find_files(search_path, [d, 'test', task], exclude_key=['inference', 'train.'] + filter_key_words)
-            dataset_file['valid'] += find_files(search_path, [d, 'valid', task], exclude_key=['inference', 'train.'] + filter_key_words)
-            dataset_file['valid'] += find_files(search_path, [d, 'dev', task], exclude_key=['inference', 'train.'] + filter_key_words)
+            search_path = find_dir(os.getcwd(), ['integrated_datasets', d, task, 'dataset'], exclude_key=['infer', 'test.'] + filter_key_words, disable_alert=False)
+            dataset_file['train'] += find_files(search_path, ['integrated_datasets', d, 'train', task], exclude_key=['.inference', 'test.'] + filter_key_words)
+            dataset_file['test'] += find_files(search_path, ['integrated_datasets', d, 'test', task], exclude_key=['inference', 'train.'] + filter_key_words)
+            dataset_file['valid'] += find_files(search_path, ['integrated_datasets', d, 'valid', task], exclude_key=['inference', 'train.'] + filter_key_words)
+            dataset_file['valid'] += find_files(search_path, ['integrated_datasets', d, 'dev', task], exclude_key=['inference', 'train.'] + filter_key_words)
         else:
-            dataset_file['train'] = find_files(d, ['train', task], exclude_key=['.inference', 'test.'] + filter_key_words)
-            dataset_file['test'] = find_files(d, ['test', task], exclude_key=['.inference', 'train.'] + filter_key_words)
-            dataset_file['valid'] = find_files(d, ['valid', task], exclude_key=['.inference', 'train.'] + filter_key_words)
-            dataset_file['valid'] += find_files(d, ['dev', task], exclude_key=['inference', 'train.'] + filter_key_words)
+            dataset_file['train'] = find_files(d, ['integrated_datasets', 'train', task], exclude_key=['.inference', 'test.'] + filter_key_words)
+            dataset_file['test'] = find_files(d, ['integrated_datasets', 'test', task], exclude_key=['.inference', 'train.'] + filter_key_words)
+            dataset_file['valid'] = find_files(d, ['integrated_datasets', 'valid', task], exclude_key=['.inference', 'train.'] + filter_key_words)
+            dataset_file['valid'] += find_files(d, ['integrated_datasets', 'dev', task], exclude_key=['inference', 'train.'] + filter_key_words)
 
     return dataset_file
+
