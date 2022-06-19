@@ -59,19 +59,16 @@ for backend in aug_backends:
                                             train_after_aug=True,
                                             rewrite_cache=True,
                                             )
-        # BoostingAugmenter.apc_classic_boost_training(config,                 # prototype Aug
-        #                                              dataset,
-        #                                              train_after_aug=True,
-        #                                              rewrite_cache=True,
-        #                                              )
-        # BoostingAugmenter.apc_mono_boost_training(config,                    # MonoAUG
-        #                                           dataset,
-        #                                           train_after_aug=True,
-        #                                           rewrite_cache=True,
-        #                                           )
-        # BoostingAugmenter.apc_boost_free_training(config,                    # Non-Aug
-        #                                           dataset,
-        #                                           )
+        BoostingAugmenter.apc_classic_augment(config,  # prototype Aug
+                                              dataset,
+                                              train_after_aug=True,
+                                              rewrite_cache=True,
+                                              )
+        BoostingAugmenter.apc_mono_augment(config,  # MonoAUG
+                                           dataset,
+                                           train_after_aug=True,
+                                           rewrite_cache=True,
+                                           )
 
 for backend in aug_backends:
     for dataset in [
@@ -107,19 +104,16 @@ for backend in aug_backends:
                                             train_after_aug=True,
                                             rewrite_cache=True,
                                             )
-        # BoostingAugmenter.apc_classic_boost_training(config,
-        #                                              dataset,
-        #                                              train_after_aug=True,
-        #                                              rewrite_cache=True,
-        #                                              )
-        # BoostingAugmenter.apc_mono_boost_training(config,
-        #                                           dataset,
-        #                                           train_after_aug=True,
-        #                                           rewrite_cache=True,
-        #                                           )
-        # BoostingAugmenter.apc_boost_free_training(config,
-        #                                           dataset,
-        #                                           )
+        BoostingAugmenter.apc_classic_augment(config,
+                                              dataset,
+                                              train_after_aug=True,
+                                              rewrite_cache=True,
+                                              )
+        BoostingAugmenter.apc_mono_augment(config,
+                                           dataset,
+                                           train_after_aug=True,
+                                           rewrite_cache=True,
+                                           )
 
 for backend in aug_backends:
     for dataset in [
@@ -149,16 +143,13 @@ for backend in aug_backends:
                                             train_after_aug=True,
                                             rewrite_cache=True,
                                             )
-        # BoostingAugmenter.apc_classic_boost_training(config,
-        #                                              dataset,
-        #                                              train_after_aug=True,
-        #                                              rewrite_cache=True,
-        #                                              )
-        # BoostingAugmenter.apc_mono_boost_training(config,
-        #                                           dataset,
-        #                                           train_after_aug=True,
-        #                                           rewrite_cache=True,
-        #                                           )
-        # BoostingAugmenter.apc_boost_free_training(config,
-        #                                           dataset,
-        #                                           )
+        BoostingAugmenter.apc_classic_augment(config,
+                                              dataset,
+                                              train_after_aug=True,
+                                              rewrite_cache=True,
+                                              )
+        BoostingAugmenter.apc_mono_augment(config,
+                                           dataset,
+                                           train_after_aug=True,
+                                           rewrite_cache=True,
+                                           )

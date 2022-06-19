@@ -8,6 +8,7 @@
 from setuptools import setup, find_packages
 
 from boost_aug import __version__, __name__
+
 setup(
     name=__name__,
     version=__version__,

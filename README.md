@@ -33,9 +33,11 @@ aspect-level polarity classification and sentence-level text classification
 ## Experiments
 
 ## MUST READ
-- If the augmentation traning is terminated by accidently or you want to rerun augmentation, set `rewrite_cache=False` in augmentation.
+
+- If the augmentation traning is terminated by accidently or you want to rerun augmentation, set `rewrite_cache=False`
+  in augmentation.
 - If you have many datasets, run augmentation for differnet datasets IN SEPARATE FOLDER, otherwise `IO OPERATION`
-may CORRUPT other datasets 
+  may CORRUPT other datasets
 
 The experimental results can be reproduced by running the `main_experiments_absc.py` or `main_experiments_tc.py`
 in the [experiment_absc](experiment_absc) and [expeirment_tc](experiment_tc) folders.
@@ -82,7 +84,6 @@ BoostingAugmenter.apc_boost_augment(config,  # BOOSTAUG
                                     )
 
 ```
-
 
 # Notice
 

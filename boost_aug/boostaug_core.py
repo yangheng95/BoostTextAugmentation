@@ -42,7 +42,6 @@ def remove(p):
         os.remove(p)
 
 
-
 class AugmentBackend:
     EDA = 'EDA'
     ContextualWordEmbsAug = 'ContextualWordEmbsAug'
@@ -158,7 +157,7 @@ class ABSCBoostAug:
 
         return MLM, AutoTokenizer.from_pretrained(config.pretrained_bert)
 
-    def load_augmentor(self, arg):
+    def load_augmentor(self, arg, cal_perplexity=False):
         if isinstance(arg, SentimentClassifier):
             self.sent_classifier = arg
             if hasattr(SentimentClassifier, 'MLM') and hasattr(SentimentClassifier, 'tokenizer'):
@@ -167,7 +166,7 @@ class ABSCBoostAug:
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
         if not hasattr(self, 'sent_classifier'):
             try:
-                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, auto_device=self.device)
+                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
             except:
                 keys = ['checkpoint', 'mono_boost', 'deberta', arg]
@@ -180,7 +179,7 @@ class ABSCBoostAug:
                         checkpoint_path = path
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
-                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, auto_device=self.device)
+                self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
 
     def single_augment(self, text, aspect, label, num=3):
@@ -746,8 +745,8 @@ class TCBoostAug:
                 MLM.bert = base_model
 
         return MLM, AutoTokenizer.from_pretrained(config.pretrained_bert)
-    
-    def load_augmentor(self, arg):
+
+    def load_augmentor(self, arg, cal_perplexity=False):
         if isinstance(arg, TextClassifier):
             self.text_classifier = arg
             if hasattr(TextClassifier, 'MLM') and hasattr(TextClassifier, 'tokenizer'):
@@ -756,7 +755,7 @@ class TCBoostAug:
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
         if not hasattr(self, 'text_classifier'):
             try:
-                self.text_classifier = TCCheckpointManager.get_text_classifier(arg, auto_device=self.device)
+                self.text_classifier = TCCheckpointManager.get_text_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
             except:
                 keys = ['checkpoint', 'mono_boost', 'deberta', arg]
@@ -769,7 +768,7 @@ class TCBoostAug:
                         checkpoint_path = path
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
-                self.text_classifier = TCCheckpointManager.get_text_classifier(arg, auto_device=self.device)
+                self.text_classifier = TCCheckpointManager.get_text_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
 
     def single_augment(self, text, label, num=3):
@@ -805,6 +804,7 @@ class TCBoostAug:
                 augs[perplexity.item()] = [text.replace('PLACEHOLDER', '$LABEL$')]
 
         if self.USE_CONFIDENCE:
+            # key_rank = list(reversed(sorted(augs.keys())))
             key_rank = sorted(augs.keys())
         else:
             key_rank = list(augs.keys())
@@ -1114,7 +1114,7 @@ class TCBoostAug:
                     max_f1 = max(path[path.index('f1'):], checkpoint_path)
                     checkpoint_path = path
 
-            self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
+            self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, cal_perplexity=True, auto_device=self.device)
 
             self.text_classifier.opt.eval_batch_size = 128
 
@@ -1304,7 +1304,7 @@ class TADBoostAug:
 
         return MLM, AutoTokenizer.from_pretrained(config.pretrained_bert)
 
-    def load_augmentor(self, arg):
+    def load_augmentor(self, arg, cal_perplexity=False):
         if isinstance(arg, TADTextClassifier):
             self.tad_classifier = arg
             if hasattr(TADTextClassifier, 'MLM') and hasattr(TADTextClassifier, 'tokenizer'):
@@ -1313,7 +1313,7 @@ class TADBoostAug:
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
         if not hasattr(self, 'tad_classifier'):
             try:
-                self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(arg, auto_device=self.device)
+                self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
             except:
                 keys = ['checkpoint', 'mono_boost', 'deberta', arg]
@@ -1326,7 +1326,7 @@ class TADBoostAug:
                         checkpoint_path = path
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
-                self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, auto_device=self.device)
+                self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, cal_perplexity=cal_perplexity, auto_device=self.device)
                 self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
 
     def single_augment(self, text, label, num=3):
@@ -1534,7 +1534,6 @@ class TADBoostAug:
 
             self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, auto_device=self.device)
 
-
             self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, _config)
 
             dataset_files = detect_dataset(dataset, task)
@@ -1566,7 +1565,7 @@ class TADBoostAug:
                         if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
                                 try:
-                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), attack_defense=False, ignore_error=False, print_result=False)
+                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), ignore_error=False, print_result=False)
                                 except Exception as e:
                                     continue
                                 ids = self.tokenizer(text, return_tensors="pt")
@@ -1783,7 +1782,7 @@ def post_clean(dataset_path):
     #     remove('{}/valid.dat.tmp'.format(dataset_path))
     for f in find_files(dataset_path, '.tmp'):
         remove(f)
-        remove(f+'.ignore')
+        remove(f + '.ignore')
 
     # for f in find_files(dataset_path, '.tmp.ignore', exclude_key='.augment.ignore'):
     #     remove(f)
@@ -1794,8 +1793,8 @@ def post_clean(dataset_path):
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
     # # download from local ABSADatasets
-    if os.path.exists('integrated_datasets'):
-        shutil.move('integrated_datasets', 'source_datasets.backup')
+    if os.path.exists('integrated_datasets') and not os.path.exists('source_datasets.backup'):
+        os.rename('integrated_datasets', 'source_datasets.backup')
 
     backup_datasets_dir = find_dir('source_datasets.backup', key=[dataset, task], disable_alert=True, recursive=True)
 
@@ -1844,4 +1843,3 @@ def detect_dataset(dataset_path, task='apc'):
             dataset_file['valid'] += find_files(d, ['integrated_datasets', 'dev', task], exclude_key=['inference', 'train.'] + filter_key_words)
 
     return dataset_file
-
