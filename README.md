@@ -1,5 +1,9 @@
 # Boosting Data Augmentation for Text Classification
 
+[![Downloads](https://pepy.tech/badge/boostaug)](https://pepy.tech/project/boostaug)
+[![Downloads](https://pepy.tech/badge/boostaug/month)](https://pepy.tech/project/boostaug)
+[![Downloads](https://pepy.tech/badge/boostaug/week)](https://pepy.tech/project/boostaug)
+
 ## Notice
 
 This tool depends on the [PyABSA](https://github.com/yangheng95/PyABSA),
