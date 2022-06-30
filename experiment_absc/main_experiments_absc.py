@@ -27,11 +27,7 @@ seeds = [random.randint(0, 10000) for _ in range(1)]
 
 for backend in aug_backends:
     for dataset in [
-        ABSADatasetList.Laptop14,
-        ABSADatasetList.Restaurant14,
-        ABSADatasetList.Restaurant15,
-        ABSADatasetList.Restaurant16,
-        ABSADatasetList.MAMS
+        ABSADatasetList.MOOC_En,
     ]:
         config = APCConfigManager.get_apc_config_english()
         config.model = APCModelList.FAST_LCF_BERT
@@ -39,7 +35,7 @@ for backend in aug_backends:
         config.similarity_threshold = 1
         config.max_seq_len = 80
         config.dropout = 0
-        config.optimizer = 'adam'
+        config.optimizer = 'adamw'
         config.cache_dataset = False
         config.pretrained_bert = 'microsoft/deberta-v3-base'
         config.hidden_dim = 768

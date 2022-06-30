@@ -10,6 +10,7 @@ from autocuda import auto_cuda
 from pyabsa.core.tad.classic.__bert__ import TADBERT
 from pyabsa.core.tad.prediction.tad_classifier import TADTextClassifier
 from pyabsa.core.tc.prediction.text_classifier import TextClassifier
+from pyabsa.functional.dataset.dataset_manager import download_datasets_from_github
 
 from boost_aug import __version__
 
@@ -1793,6 +1794,8 @@ def post_clean(dataset_path):
 
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
     # # download from local ABSADatasets
+    if not os.path.exists('integrated_datasets') and not os.path.exists('source_datasets.backup'):
+        download_datasets_from_github(os.getcwd())
     if os.path.exists('integrated_datasets') and not os.path.exists('source_datasets.backup'):
         os.rename('integrated_datasets', 'source_datasets.backup')
 
