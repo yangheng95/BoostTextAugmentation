@@ -15,43 +15,27 @@ or [annotate your dataset](https://github.com/yangheng95/ABSADatasets/tree/v1.2/
 
 ## Install BoostAug
 
-### Install from pip
-
-```bash
-pip install BoostAug
-```
-
 ### Install from source
 
 ```bash
-git clone https://github.com/yangheng95/BoostingAugABSA
-cd BoostingAugABSA
+git clone https://github.com/yangheng95/BoostTextAugmentation
+
+cd BoostTextAugmentation
+
 pip install .
 ```
 
 ## Quick Start
 
-We made a package BoostAug which can helps while using our code, here are the examples for using BoostAug to improve
+We made a package which can helps while using our code, here are the examples for using augmentation to improve
 aspect-level polarity classification and sentence-level text classification
-
-## Experiments
-
-## MUST READ
-
-- If the augmentation traning is terminated by accidently or you want to rerun augmentation, set `rewrite_cache=False`
-  in augmentation.
-- If you have many datasets, run augmentation for differnet datasets IN SEPARATE FOLDER, otherwise `IO OPERATION`
-  may CORRUPT other datasets
-
-The experimental results can be reproduced by running the `main_experiments_absc.py` or `main_experiments_tc.py`
-in the [experiment_absc](experiment_absc) and [expeirment_tc](experiment_tc) folders.
 
 If there is no enough resource to run augmentation, we have done some augmentation and
 prepared some augmentation sets in the dataset folders, please set `rewrite_cache=False` to run training on these
 augmentation sets.
 e.g.,
 
-### Import BoostAug
+### Usage
 
 ```python3
 import shutil
@@ -81,13 +65,21 @@ BoostingAugmenter = BoostingAug(AUGMENT_BACKEND=aug_backend, device=autocuda.aut
 ### Augmentation and Training
 
 ```python3
-BoostingAugmenter.apc_boost_augment(config,  # BOOSTAUG
+BoostingAugmenter.apc_boost_augment(config,  
                                     dataset,
                                     train_after_aug=True,  # comment this line to perform augmentation without training
                                     rewrite_cache=False, # use pre-augmented datasets for training to evaluate performance
                                     )
 
 ```
+
+## MUST READ
+
+- If the augmentation traning is terminated by accidently or you want to rerun augmentation, set `rewrite_cache=True`
+  in augmentation.
+- If you have many datasets, run augmentation for differnet datasets IN SEPARATE FOLDER, otherwise `IO OPERATION`
+  may CORRUPT other datasets
+
 
 # Notice
 

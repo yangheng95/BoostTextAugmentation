@@ -17,13 +17,13 @@ setup(
     # Author details
     author='Yang Heng',
     author_email='hy345@exeter.ac.uk',
-    python_requires=">3.8",
+    python_requires=">=3.6",
     packages=find_packages(),
     include_package_data=True,
     exclude_package_date={'': ['.gitignore']},
     # Choose your license
     license='MIT',
-    install_requires=['pyabsa>=1.14.8',
+    install_requires=['pyabsa>=1.15.6',
                       'textattack',
                       'nlpaug',
                       'tensorflow_text'],
