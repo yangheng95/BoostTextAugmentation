@@ -503,8 +503,8 @@ class ABSCBoostAug:
 
             post_clean(os.path.dirname(dataset_file))
 
-        for f in find_cwd_files('.augment.ignore'):
-            rename(f, f.replace('.augment.ignore', ''))
+        for f in find_cwd_files('.ignore'):
+            rename(f, f.replace('.ignore', ''))
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
@@ -630,8 +630,8 @@ class ABSCBoostAug:
 
             post_clean(os.path.dirname(boost_set))
 
-        for f in find_cwd_files('.augment.ignore'):
-            rename(f, f.replace('.augment.ignore', ''))
+        for f in find_cwd_files('.ignore'):
+            rename(f, f.replace('.ignore', ''))
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
@@ -1064,8 +1064,8 @@ class TCBoostAug:
 
             post_clean(os.path.dirname(dataset_file))
 
-        for f in find_cwd_files('.augment.ignore'):
-            rename(f, f.replace('.augment.ignore', ''))
+        for f in find_cwd_files('.ignore'):
+            rename(f, f.replace('.ignore', ''))
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
@@ -1188,8 +1188,8 @@ class TCBoostAug:
 
             post_clean(os.path.dirname(boost_set))
 
-        for f in find_cwd_files('.augment.ignore'):
-            rename(f, f.replace('.augment.ignore', ''))
+        for f in find_cwd_files('.ignore'):
+            rename(f, f.replace('.ignore', ''))
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
@@ -1616,7 +1616,7 @@ class TADBoostAug:
 
             post_clean(os.path.dirname(dataset_file))
 
-        for f in find_cwd_files('.augment.ignore'):
+        for f in find_cwd_files('.ignore'):
             rename(f, f.replace('.ignore', ''))
 
         if train_after_aug:
@@ -1740,8 +1740,8 @@ class TADBoostAug:
 
             post_clean(os.path.dirname(boost_set))
 
-        for f in find_cwd_files('.augment.ignore'):
-            rename(f, f.replace('.augment.ignore', ''))
+        for f in find_cwd_files('.ignore'):
+            rename(f, f.replace('.ignore', ''))
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
