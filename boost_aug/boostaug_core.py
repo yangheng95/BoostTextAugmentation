@@ -510,7 +510,7 @@ class ABSCBoostAug:
             print(colored('Start cross boosting augment...', 'green'))
             return Trainer(config=config,
                            dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=0,  # =None to avoid save model
+                           checkpoint_save_mode=1,  # =None to avoid save model
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
@@ -637,7 +637,7 @@ class ABSCBoostAug:
             print(colored('Start mono boosting augment...', 'yellow'))
             return Trainer(config=config,
                            dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=0,  # =None to avoid save model
+                           checkpoint_save_mode=1,  # =None to avoid save model
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
@@ -1071,7 +1071,7 @@ class TCBoostAug:
             print(colored('Start cross boosting augment...', 'green'))
             return Trainer(config=config,
                            dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=0,  # =None to avoid save model
+                           checkpoint_save_mode=1,  # =None to avoid save model
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
@@ -1195,7 +1195,7 @@ class TCBoostAug:
             print(colored('Start mono boosting augment...', 'yellow'))
             return Trainer(config=config,
                            dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=0,  # =None to avoid save model
+                           checkpoint_save_mode=1,  # =None to avoid save model
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
@@ -1623,7 +1623,7 @@ class TADBoostAug:
             print(colored('Start cross boosting augment...', 'green'))
             return Trainer(config=config,
                            dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=0,  # =None to avoid save model
+                           checkpoint_save_mode=1,  # =None to avoid save model
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
@@ -1747,7 +1747,7 @@ class TADBoostAug:
             print(colored('Start mono boosting augment...', 'yellow'))
             return Trainer(config=config,
                            dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=0,  # =None to avoid save model
+                           checkpoint_save_mode=1,  # =None to avoid save model
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
 
