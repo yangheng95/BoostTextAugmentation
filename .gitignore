@@ -23,8 +23,9 @@ __pycache__/
 *.result.json
 .idea/
 experiments/
+experiment_absc/
+experiment_tc/
 wandb/
-
 # Embedding
 glove.840B.300d.txt
 glove.42B.300d.txt
