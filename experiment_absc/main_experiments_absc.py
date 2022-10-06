@@ -54,7 +54,7 @@ seeds = [random.randint(0, 10000) for _ in range(1)]
 #         config.l2reg = 1e-8
 #         config.seed = seeds
 #
-#         BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
+#         BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), BOOSTING_FOLD=4, AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
 #         BoostingAugmenter.apc_boost_augment(config,
 #                                             dataset,
 #                                             train_after_aug=True,
@@ -70,7 +70,7 @@ seeds = [random.randint(0, 10000) for _ in range(1)]
 #         #                                    train_after_aug=True,
 #         #                                    rewrite_cache=True,
 #         #                                    )
-
+#
 # for backend in aug_backends:
 #     for dataset in [
 #         ABSADatasetList.Laptop14,
@@ -99,7 +99,7 @@ seeds = [random.randint(0, 10000) for _ in range(1)]
 #         config.l2reg = 1e-8
 #         config.seed = seeds
 #
-#         BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
+#         BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), BOOSTING_FOLD=4, AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
 #         BoostingAugmenter.apc_boost_augment(config,
 #                                             dataset,
 #                                             train_after_aug=True,
@@ -119,7 +119,7 @@ seeds = [random.randint(0, 10000) for _ in range(1)]
 #
 for backend in aug_backends:
     for dataset in [
-        ABSADatasetList.Laptop14,
+        # ABSADatasetList.Laptop14,
         ABSADatasetList.Restaurant14,
         ABSADatasetList.Restaurant15,
         ABSADatasetList.Restaurant16,
@@ -145,7 +145,7 @@ for backend in aug_backends:
         config.l2reg = 1e-8
         config.seed = seeds
 
-        BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
+        BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), BOOSTING_FOLD=4, AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
         BoostingAugmenter.apc_boost_augment(config,
                                             dataset,
                                             train_after_aug=True,
@@ -185,7 +185,7 @@ for backend in aug_backends:
 #         apc_config.log_step = 5
 #         apc_config.seed = seeds
 #
-#         BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
+#         BoostingAugmenter = ABSCBoostAug(ROOT=os.getcwd(), BOOSTING_FOLD=4, AUGMENT_BACKEND=backend, AUGMENT_NUM_PER_CASE=16, WINNER_NUM_PER_CASE=8, device=device)
 #         BoostingAugmenter.apc_boost_augment(apc_config,
 #                                             dataset,
 #                                             train_after_aug=True,
