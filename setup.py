@@ -9,6 +9,13 @@ from setuptools import setup, find_packages
 
 from boost_aug import __version__, __name__
 
+extras_require = {'full': [
+    # install the following requirements depend on the backend of your choice
+    'textattack',
+    'nlpaug',
+    'tensorflow_text'
+]}
+
 setup(
     name=__name__,
     version=__version__,
@@ -24,10 +31,7 @@ setup(
     # Choose your license
     license='MIT',
     install_requires=[
-        'pyabsa>=1.16.18',
-        # install the following requirements depend on the backend of your choice
-        # 'textattack',
-        # 'nlpaug',
-        # 'tensorflow_text'
+        'pyabsa>=1.16.18,<=1.16.27',
     ],
+    extras_require=extras_require,
 )

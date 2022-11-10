@@ -26,8 +26,6 @@ from pyabsa.functional.dataset import DatasetItem
 from pyabsa import ABSADatasetList
 
 from transformers import BertForMaskedLM, DebertaV2ForMaskedLM, AutoConfig, AutoTokenizer, RobertaForMaskedLM
-import tempfile
-import git
 
 
 def rename(src, tgt):
@@ -48,6 +46,7 @@ class AugmentBackend:
     ContextualWordEmbsAug = 'ContextualWordEmbsAug'
     RandomWordAug = 'RandomWordAug'
     AntonymAug = 'AntonymAug'
+    SynonymAug = 'SynonymAug'
     SplitAug = 'SplitAug'
     BackTranslationAug = 'BackTranslationAug'
     SpellingAug = 'SpellingAug'
@@ -117,6 +116,8 @@ class ABSCBoostAug:
                 self.augmenter = naw.RandomWordAug(action="swap")
             elif self.AUGMENT_BACKEND in 'AntonymAug':
                 self.augmenter = naw.AntonymAug()
+            elif self.AUGMENT_BACKEND in 'SynonymAug':
+                self.augmenter = naw.SynonymAug()
             elif self.AUGMENT_BACKEND in 'SplitAug':
                 self.augmenter = naw.SplitAug()
             elif self.AUGMENT_BACKEND in 'BackTranslationAug':
@@ -126,6 +127,8 @@ class ABSCBoostAug:
                                                         )
             elif self.AUGMENT_BACKEND in 'SpellingAug':
                 self.augmenter = naw.SpellingAug()
+            else:
+                raise Exception('Augmentation backend not supported')
 
     def get_mlm_and_tokenizer(self, sent_classifier, config):
 
@@ -293,7 +296,13 @@ class ABSCBoostAug:
                 if self.AUGMENT_BACKEND in 'EDA':
                     augs = self.augmenter.augment(item[0])
                 else:
-                    augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                    try:
+                        augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                    except:
+                        try:
+                            augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE)
+                        except:
+                            augs = []
 
                 if isinstance(augs, str):
                     augs = [augs]
@@ -428,7 +437,13 @@ class ABSCBoostAug:
                     if self.AUGMENT_BACKEND in 'EDA':
                         raw_augs = self.augmenter.augment(lines[i])
                     else:
-                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        try:
+                            raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        except:
+                            try:
+                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                            except:
+                                raw_augs = []
 
                     if isinstance(raw_augs, str):
                         raw_augs = [raw_augs]
@@ -580,7 +595,13 @@ class ABSCBoostAug:
                     if self.AUGMENT_BACKEND in 'EDA':
                         raw_augs = self.augmenter.augment(lines[i])
                     else:
-                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        try:
+                            raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        except:
+                            try:
+                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                            except:
+                                raw_augs = []
 
                     if isinstance(raw_augs, str):
                         raw_augs = [raw_augs]
@@ -706,6 +727,8 @@ class TCBoostAug:
                 self.augmenter = naw.RandomWordAug(action="swap")
             elif self.AUGMENT_BACKEND in 'AntonymAug':
                 self.augmenter = naw.AntonymAug()
+            elif self.AUGMENT_BACKEND in 'SynonymAug':
+                self.augmenter = naw.SynonymAug()
             elif self.AUGMENT_BACKEND in 'SplitAug':
                 self.augmenter = naw.SplitAug()
             elif self.AUGMENT_BACKEND in 'BackTranslationAug':
@@ -715,6 +738,8 @@ class TCBoostAug:
                                                         )
             elif self.AUGMENT_BACKEND in 'SpellingAug':
                 self.augmenter = naw.SpellingAug()
+            else:
+                raise Exception('Augmentation backend not supported')
 
     def get_mlm_and_tokenizer(self, text_classifier, config):
 
@@ -880,11 +905,18 @@ class TCBoostAug:
                 if self.AUGMENT_BACKEND in 'EDA':
                     augs = self.augmenter.augment(item[0])
                 else:
-                    augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
-
+                    try:
+                        augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                    except:
+                        try:
+                            augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE)
+                        except:
+                            augs = []
                 if isinstance(augs, str):
                     augs = [augs]
                 for aug in augs:
+                    if not aug:
+                        continue
                     if aug.endswith('PLACEHOLDER {}'.format(label)) or aug.endswith('PLACEHOLDER{}'.format(label)):
                         _text = aug.replace('PLACEHOLDER', '$LABEL$')
                         fout_aug_train.write(_text + '\n')
@@ -1005,7 +1037,13 @@ class TCBoostAug:
                     if self.AUGMENT_BACKEND in 'EDA':
                         raw_augs = self.augmenter.augment(lines[i])
                     else:
-                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        try:
+                            raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        except:
+                            try:
+                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                            except:
+                                raw_augs = []
 
                     if isinstance(raw_augs, str):
                         raw_augs = [raw_augs]
@@ -1141,7 +1179,13 @@ class TCBoostAug:
                     if self.AUGMENT_BACKEND in 'EDA':
                         raw_augs = self.augmenter.augment(lines[i])
                     else:
-                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        try:
+                            raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        except:
+                            try:
+                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                            except:
+                                raw_augs = []
 
                     if isinstance(raw_augs, str):
                         raw_augs = [raw_augs]
@@ -1264,6 +1308,8 @@ class TADBoostAug:
                 self.augmenter = naw.RandomWordAug(action="swap")
             elif self.AUGMENT_BACKEND in 'AntonymAug':
                 self.augmenter = naw.AntonymAug()
+            elif self.AUGMENT_BACKEND in 'SynonymAug':
+                self.augmenter = naw.SynonymAug()
             elif self.AUGMENT_BACKEND in 'SplitAug':
                 self.augmenter = naw.SplitAug()
             elif self.AUGMENT_BACKEND in 'BackTranslationAug':
@@ -1273,6 +1319,9 @@ class TADBoostAug:
                                                         )
             elif self.AUGMENT_BACKEND in 'SpellingAug':
                 self.augmenter = naw.SpellingAug()
+            else:
+                raise Exception('Augmentation backend not supported')
+
 
     def get_mlm_and_tokenizer(self, text_classifier, config):
 
@@ -1437,11 +1486,19 @@ class TADBoostAug:
                 if self.AUGMENT_BACKEND in 'EDA':
                     augs = self.augmenter.augment(item[0])
                 else:
-                    augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                    try:
+                        augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                    except:
+                        try:
+                            augs = self.augmenter.augment(item[0], n=self.AUGMENT_NUM_PER_CASE)
+                        except:
+                            augs = []
 
                 if isinstance(augs, str):
                     augs = [augs]
                 for aug in augs:
+                    if not aug:
+                        continue
                     if aug.endswith('PLACEHOLDER {}'.format(label)) or aug.endswith('PLACEHOLDER{}'.format(label)):
                         _text = aug.replace('PLACEHOLDER', '$LABEL$')
                         fout_aug_train.write(_text + '\n')
@@ -1557,7 +1614,13 @@ class TADBoostAug:
                     if self.AUGMENT_BACKEND in 'EDA':
                         raw_augs = self.augmenter.augment(lines[i])
                     else:
-                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        try:
+                            raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        except:
+                            try:
+                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                            except:
+                                raw_augs = []
 
                     if isinstance(raw_augs, str):
                         raw_augs = [raw_augs]
@@ -1693,7 +1756,13 @@ class TADBoostAug:
                     if self.AUGMENT_BACKEND in 'EDA':
                         raw_augs = self.augmenter.augment(lines[i])
                     else:
-                        raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        try:
+                            raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
+                        except:
+                            try:
+                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                            except:
+                                raw_augs = []
 
                     if isinstance(raw_augs, str):
                         raw_augs = [raw_augs]
