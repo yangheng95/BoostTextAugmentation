@@ -31,7 +31,7 @@ setup(
     # Choose your license
     license='MIT',
     install_requires=[
-        'pyabsa>=1.16.18,<=1.16.27',
+        'pyabsa>=2.0.10',
     ],
     extras_require=extras_require,
 )

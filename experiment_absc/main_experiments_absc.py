@@ -27,7 +27,6 @@ device = autocuda.auto_cuda()
 # seeds = [random.randint(0, 10000) for _ in range(5)]
 seeds = [random.randint(0, 10000) for _ in range(1)]
 
-
 for backend in aug_backends:
     for dataset in [
         ABSADatasetList.Laptop14,
@@ -125,7 +124,6 @@ for backend in aug_backends:
         #                                    train_after_aug=True,
         #                                    rewrite_cache=True,
         #                                    )
-
 
 for backend in aug_backends:
     for dataset in [

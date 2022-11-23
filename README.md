@@ -80,7 +80,6 @@ BoostingAugmenter.apc_boost_augment(config,
 - If you have many datasets, run augmentation for differnet datasets IN SEPARATE FOLDER, otherwise `IO OPERATION`
   may CORRUPT other datasets
 
-
 # Notice
 
 This is the draft code, so do not perform cross-boosting on different dataset in the same folder, which will raise some

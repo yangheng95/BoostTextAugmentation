@@ -6,9 +6,9 @@ import random
 import warnings
 
 from pyabsa import TCDatasetList
-from pyabsa.functional import GloVeTCModelList, Trainer
-from pyabsa.functional import TCConfigManager
-from pyabsa.functional import BERTTCModelList
+from pyabsa import GloVeTCModelList, Trainer
+from pyabsa import TCConfigManager
+from pyabsa import BERTTCModelList
 
 from boost_aug import TCBoostAug, AugmentBackend
 

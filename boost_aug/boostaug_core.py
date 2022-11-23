@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+# file: core.py
+# time: 2022/11/23 19:09
+# author: yangheng <hy345@exeter.ac.uk>
+# github: https://github.com/yangheng95
+# GScholar: https://scholar.google.com/citations?user=NPq5a_0AAAAJ&hl=en
+# ResearchGate: https://www.researchgate.net/profile/Heng-Yang-17/research
+# Copyright (C) 2022. All Rights Reserved.
+
+
 import itertools
 import random
 import shutil
@@ -7,23 +17,19 @@ import numpy as np
 import torch
 import tqdm
 from autocuda import auto_cuda
-from pyabsa.core.tad.classic.__bert__ import TADBERT
-from pyabsa.core.tad.prediction.tad_classifier import TADTextClassifier
-from pyabsa.core.tc.prediction.text_classifier import TextClassifier
-from pyabsa.functional.dataset.dataset_manager import download_datasets_from_github
+from pyabsa import APCCheckpointManager, DatasetItem, TCCheckpointManager, TADCheckpointManager, APCDatasetList, download_all_available_datasets
+
+from pyabsa.framework.configuration_class.configuration_template import ConfigManager
+from pyabsa.tasks.AspectPolarityClassification import SentimentClassifier, APCConfigManager, APCModelList, APCTrainer
+from pyabsa.tasks.TextAdversarialDefense import TADTextClassifier, TADConfigManager, TADTrainer
+from pyabsa.tasks.TextAdversarialDefense.models.__plm__.tad_bert import TADBERT
+from pyabsa.tasks.TextClassification import TextClassifier, TCConfigManager, BERTTCModelList, TCTrainer, TCDatasetList
 
 from boost_aug import __version__
 
-from findfile import find_cwd_files, find_cwd_dir, find_dir, find_files, find_dirs, find_file
-from pyabsa import APCCheckpointManager, APCModelList, TCCheckpointManager, BERTTCModelList, TCDatasetList, TCConfigManager, APCConfigManager, TADConfigManager, TADCheckpointManager
-from pyabsa.core.apc.prediction.sentiment_classifier import SentimentClassifier
+from findfile import find_cwd_files, find_cwd_dir, find_dir, find_files, find_dirs
 
 from termcolor import colored
-
-from pyabsa.functional import Trainer
-from pyabsa.functional.config.config_manager import ConfigManager
-from pyabsa.functional.dataset import DatasetItem
-from pyabsa import ABSADatasetList
 
 from transformers import BertForMaskedLM, DebertaV2ForMaskedLM, AutoConfig, AutoTokenizer, RobertaForMaskedLM
 
@@ -139,13 +145,13 @@ class ABSCBoostAug:
         pretrained_config = AutoConfig.from_pretrained(config.pretrained_bert)
         try:
             if 'deberta-v3' in config.pretrained_bert:
-                MLM = DebertaV2ForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(sent_classifier.config.device)
                 MLM.deberta = base_model
             elif 'roberta' in config.pretrained_bert:
-                MLM = RobertaForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
+                MLM = RobertaForMaskedLM(pretrained_config).to(sent_classifier.config.device)
                 MLM.roberta = base_model
             else:
-                MLM = BertForMaskedLM(pretrained_config).to(sent_classifier.opt.device)
+                MLM = BertForMaskedLM(pretrained_config).to(sent_classifier.config.device)
                 MLM.bert = base_model
         except Exception as e:
             self.device = auto_cuda()
@@ -167,11 +173,11 @@ class ABSCBoostAug:
             if hasattr(SentimentClassifier, 'MLM') and hasattr(SentimentClassifier, 'tokenizer'):
                 self.MLM, self.tokenizer = self.sent_classifier.MLM, self.sent_classifier.tokenizer
             else:
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.config)
         if not hasattr(self, 'sent_classifier'):
             try:
                 self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.config)
             except:
                 keys = ['checkpoint', 'mono_boost', 'deberta', arg]
 
@@ -184,7 +190,7 @@ class ABSCBoostAug:
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
                 self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, self.sent_classifier.config)
 
     def single_augment(self, text, aspect, label, num=3):
 
@@ -197,8 +203,8 @@ class ABSCBoostAug:
             raw_augs = [raw_augs]
         augs = {}
         for text in raw_augs:
-            _text = text.replace(aspect, '[ASP]{}[ASP] '.format(aspect))
-            _text += '!sent!{}'.format(label)
+            _text = text.replace(aspect, '[B-ASP]{}[E-ASP] '.format(aspect))
+            _text += '$LABEL${}'.format(label)
 
             with torch.no_grad():
                 try:
@@ -241,11 +247,11 @@ class ABSCBoostAug:
         apc_config_english.pretrained_bert = 'microsoft/deberta-v3-base'
         apc_config_english.SRD = 3
         apc_config_english.lcf = 'cdw'
-        apc_config_english.optimizer = 'adamw'
+        apc_config_english.configimizer = 'adamw'
         apc_config_english.use_bert_spc = True
         apc_config_english.learning_rate = 1e-5
         apc_config_english.batch_size = 16
-        apc_config_english.num_epoch = 25
+        apc_config_english.num_epoch = 10
         apc_config_english.log_step = -1
         apc_config_english.evaluate_begin = 0
         apc_config_english.l2reg = 1e-8
@@ -319,10 +325,10 @@ class ABSCBoostAug:
 
         if train_after_aug:
             print(colored('Start classic augment training...', 'cyan'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           ).load_trained_model()
+            return APCTrainer(config=config,
+                              dataset=dataset,  # train set and test set will be automatically detected
+                              auto_device=self.device  # automatic choose CUDA or CPU
+                              ).load_trained_model()
 
     def apc_boost_augment(self, config: ConfigManager,
                           dataset: DatasetItem,
@@ -389,14 +395,14 @@ class ABSCBoostAug:
             keys = ['checkpoint', 'cross_boost', dataset.dataset_name, 'fast_lcf_bert', 'deberta', 'No.{}'.format(b_idx + 1)]
             # keys = ['checkpoint', 'cross_boost', 'fast_lcf_bert', 'deberta', 'No.{}'.format(b_idx + 1)]
 
-            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM:
                 # _config.log_step = -1
-                Trainer(config=_config,
-                        dataset=dataset,  # train set and test set will be automatically detected
-                        checkpoint_save_mode=1,
-                        path_to_save='checkpoints/cross_boost/{}/No.{}/'.format(tag, b_idx + 1),
-                        auto_device=self.device  # automatic choose CUDA or CPU
-                        )
+                APCTrainer(config=_config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=1,
+                           path_to_save='checkpoints/cross_boost/{}/No.{}/'.format(tag, b_idx + 1),
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -410,7 +416,7 @@ class ABSCBoostAug:
 
             self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(checkpoint_path, auto_device=self.device)
 
-            self.sent_classifier.opt.eval_batch_size = 128
+            self.sent_classifier.config.eval_batch_size = 128
 
             self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, _config)
 
@@ -441,7 +447,7 @@ class ABSCBoostAug:
                             raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
                         except:
                             try:
-                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                                raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE)
                             except:
                                 raw_augs = []
 
@@ -450,7 +456,7 @@ class ABSCBoostAug:
                     augs = {}
                     for text in raw_augs:
                         if 'PLACEHOLDER' in text:
-                            _text = text.replace('PLACEHOLDER', '[ASP]{}[ASP] '.format(lines[i + 1])) + ' !sent! {}'.format(lines[i + 2])
+                            _text = text.replace('PLACEHOLDER', '[B-ASP]{}[E-ASP] '.format(lines[i + 1])) + ' $LABEL$ {}'.format(lines[i + 2])
                         else:
                             continue
 
@@ -523,11 +529,11 @@ class ABSCBoostAug:
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=1,  # =None to avoid save model
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           )
+            return APCTrainer(config=config,
+                              dataset=dataset,  # train set and test set will be automatically detected
+                              checkpoint_save_mode=1,  # =None to avoid save model
+                              auto_device=self.device  # automatic choose CUDA or CPU
+                              )
 
     def apc_mono_augment(self, config: ConfigManager,
                          dataset: DatasetItem,
@@ -550,14 +556,14 @@ class ABSCBoostAug:
 
             keys = ['checkpoint', 'mono_boost', 'fast_lcf_bert', dataset.dataset_name, 'deberta']
 
-            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM:
                 # _config.log_step = -1
-                Trainer(config=_config,
-                        dataset=dataset,  # train set and test set will be automatically detected
-                        checkpoint_save_mode=1,
-                        path_to_save='checkpoints/mono_boost/{}/'.format(tag),
-                        auto_device=self.device  # automatic choose CUDA or CPU
-                        )
+                APCTrainer(config=_config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=1,
+                           path_to_save='checkpoints/mono_boost/{}/'.format(tag),
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -571,7 +577,7 @@ class ABSCBoostAug:
 
             self.sent_classifier = APCCheckpointManager.get_sentiment_classifier(checkpoint_path, auto_device=self.device)
 
-            self.sent_classifier.opt.eval_batch_size = 128
+            self.sent_classifier.config.eval_batch_size = 128
 
             self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.sent_classifier, _config)
 
@@ -599,7 +605,7 @@ class ABSCBoostAug:
                             raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
                         except:
                             try:
-                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                                raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE)
                             except:
                                 raw_augs = []
 
@@ -608,7 +614,7 @@ class ABSCBoostAug:
                     augs = {}
                     for text in raw_augs:
                         if 'PLACEHOLDER' in text:
-                            _text = text.replace('PLACEHOLDER', '[ASP]{}[ASP] '.format(lines[i + 1])) + ' !sent! {}'.format(lines[i + 2])
+                            _text = text.replace('PLACEHOLDER', '[B-ASP]{}[E-ASP] '.format(lines[i + 1])) + ' $LABEL$ {}'.format(lines[i + 2])
                         else:
                             continue
 
@@ -656,11 +662,11 @@ class ABSCBoostAug:
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=1,  # =None to avoid save model
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           )
+            return APCTrainer(config=config,
+                              dataset=dataset,  # train set and test set will be automatically detected
+                              checkpoint_save_mode=1,  # =None to avoid save model
+                              auto_device=self.device  # automatic choose CUDA or CPU
+                              )
 
 
 class TCBoostAug:
@@ -750,13 +756,13 @@ class TCBoostAug:
         pretrained_config = AutoConfig.from_pretrained(config.pretrained_bert)
         try:
             if 'deberta-v3' in config.pretrained_bert:
-                MLM = DebertaV2ForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(text_classifier.config.device)
                 MLM.deberta = base_model
             elif 'roberta' in config.pretrained_bert:
-                MLM = RobertaForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM = RobertaForMaskedLM(pretrained_config).to(text_classifier.config.device)
                 MLM.roberta = base_model
             else:
-                MLM = BertForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM = BertForMaskedLM(pretrained_config).to(text_classifier.config.device)
                 MLM.bert = base_model
         except Exception as e:
             self.device = auto_cuda()
@@ -778,11 +784,11 @@ class TCBoostAug:
             if hasattr(TextClassifier, 'MLM') and hasattr(TextClassifier, 'tokenizer'):
                 self.MLM, self.tokenizer = self.text_classifier.MLM, self.text_classifier.tokenizer
             else:
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.config)
         if not hasattr(self, 'text_classifier'):
             try:
                 self.text_classifier = TCCheckpointManager.get_text_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.config)
             except:
                 keys = ['checkpoint', 'mono_boost', 'deberta', arg]
 
@@ -795,7 +801,7 @@ class TCBoostAug:
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
                 self.text_classifier = TCCheckpointManager.get_text_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, self.text_classifier.config)
 
     def single_augment(self, text, label, num=3):
 
@@ -857,13 +863,13 @@ class TCBoostAug:
         tc_config_english.dropout = 0
         tc_config_english.model = BERTTCModelList.BERT
         tc_config_english.pretrained_bert = 'microsoft/deberta-v3-base'
-        tc_config_english.optimizer = 'adamw'
+        tc_config_english.configimizer = 'adamw'
         tc_config_english.cache_dataset = False
         tc_config_english.patience = 10
         tc_config_english.log_step = -1
         tc_config_english.learning_rate = 1e-5
         tc_config_english.batch_size = 16
-        tc_config_english.num_epoch = 10
+        tc_config_english.num_epoch = 5
         tc_config_english.evaluate_begin = 0
         tc_config_english.l2reg = 1e-8
         tc_config_english.cross_validate_fold = -1  # disable cross_validate
@@ -873,7 +879,7 @@ class TCBoostAug:
     def tc_classic_augment(self, config: ConfigManager,
                            dataset: DatasetItem,
                            rewrite_cache=True,
-                           task='text_classification',
+                           task='tc',
                            train_after_aug=False
                            ):
         if not isinstance(dataset, DatasetItem):
@@ -927,15 +933,15 @@ class TCBoostAug:
 
         if train_after_aug:
             print(colored('Start classic augment training...', 'cyan'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           ).load_trained_model()
+            return TCTrainer(config=config,
+                             dataset=dataset,  # train set and test set will be automatically detected
+                             auto_device=self.device  # automatic choose CUDA or CPU
+                             ).load_trained_model()
 
     def tc_boost_augment(self, config: ConfigManager,
                          dataset: DatasetItem,
                          rewrite_cache=True,
-                         task='text_classification',
+                         task='tc',
                          train_after_aug=False
                          ):
         if not isinstance(dataset, DatasetItem):
@@ -994,13 +1000,13 @@ class TCBoostAug:
 
             keys = ['checkpoint', 'cross_boost', dataset.dataset_name, 'deberta', 'No.{}'.format(b_idx + 1)]
 
-            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
-                Trainer(config=_config,
-                        dataset=dataset,  # train set and test set will be automatically detected
-                        checkpoint_save_mode=1,
-                        path_to_save='checkpoints/cross_boost/{}/No.{}'.format(tag, b_idx + 1),
-                        auto_device=self.device  # automatic choose CUDA or CPU
-                        )
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM:
+                TCTrainer(config=_config,
+                          dataset=dataset,  # train set and test set will be automatically detected
+                          checkpoint_save_mode=1,
+                          path_to_save='checkpoints/cross_boost/{}/No.{}'.format(tag, b_idx + 1),
+                          auto_device=self.device  # automatic choose CUDA or CPU
+                          )
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -1013,7 +1019,7 @@ class TCBoostAug:
                     checkpoint_path = path
 
             self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, auto_device=self.device)
-            self.text_classifier.opt.eval_batch_size = 128
+            self.text_classifier.config.eval_batch_size = 128
 
             self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, _config)
 
@@ -1041,7 +1047,7 @@ class TCBoostAug:
                             raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
                         except:
                             try:
-                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                                raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE)
                             except:
                                 raw_augs = []
 
@@ -1107,16 +1113,16 @@ class TCBoostAug:
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=1,  # =None to avoid save model
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           )
+            return TCTrainer(config=config,
+                             dataset=dataset,  # train set and test set will be automatically detected
+                             checkpoint_save_mode=1,  # =None to avoid save model
+                             auto_device=self.device  # automatic choose CUDA or CPU
+                             )
 
     def tc_mono_augment(self, config: ConfigManager,
                         dataset: DatasetItem,
                         rewrite_cache=True,
-                        task='text_classification',
+                        task='tc',
                         train_after_aug=False
                         ):
         if not isinstance(dataset, DatasetItem):
@@ -1134,14 +1140,14 @@ class TCBoostAug:
 
             keys = ['checkpoint', 'mono_boost', dataset.dataset_name, 'deberta']
 
-            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM:
                 # _config.log_step = -1
-                Trainer(config=_config,
-                        dataset=dataset,  # train set and test set will be automatically detected
-                        checkpoint_save_mode=1,
-                        path_to_save='checkpoints/mono_boost/{}/'.format(tag),
-                        auto_device=self.device  # automatic choose CUDA or CPU
-                        )
+                TCTrainer(config=_config,
+                          dataset=dataset,  # train set and test set will be automatically detected
+                          checkpoint_save_mode=1,
+                          path_to_save='checkpoints/mono_boost/{}/'.format(tag),
+                          auto_device=self.device  # automatic choose CUDA or CPU
+                          )
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -1155,7 +1161,7 @@ class TCBoostAug:
 
             self.text_classifier = TCCheckpointManager.get_text_classifier(checkpoint_path, cal_perplexity=True, auto_device=self.device)
 
-            self.text_classifier.opt.eval_batch_size = 128
+            self.text_classifier.config.eval_batch_size = 128
 
             self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.text_classifier, _config)
 
@@ -1183,7 +1189,7 @@ class TCBoostAug:
                             raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
                         except:
                             try:
-                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                                raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE)
                             except:
                                 raw_augs = []
 
@@ -1237,11 +1243,11 @@ class TCBoostAug:
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=1,  # =None to avoid save model
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           )
+            return TCTrainer(config=config,
+                             dataset=dataset,  # train set and test set will be automatically detected
+                             checkpoint_save_mode=1,  # =None to avoid save model
+                             auto_device=self.device  # automatic choose CUDA or CPU
+                             )
 
 
 class TADBoostAug:
@@ -1322,7 +1328,6 @@ class TADBoostAug:
             else:
                 raise Exception('Augmentation backend not supported')
 
-
     def get_mlm_and_tokenizer(self, text_classifier, config):
 
         if isinstance(text_classifier, TADTextClassifier):
@@ -1332,13 +1337,13 @@ class TADBoostAug:
         pretrained_config = AutoConfig.from_pretrained(config.pretrained_bert)
         try:
             if 'deberta-v3' in config.pretrained_bert:
-                MLM = DebertaV2ForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM = DebertaV2ForMaskedLM(pretrained_config).to(text_classifier.config.device)
                 MLM.deberta = base_model
             elif 'roberta' in config.pretrained_bert:
-                MLM = RobertaForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM = RobertaForMaskedLM(pretrained_config).to(text_classifier.config.device)
                 MLM.roberta = base_model
             else:
-                MLM = BertForMaskedLM(pretrained_config).to(text_classifier.opt.device)
+                MLM = BertForMaskedLM(pretrained_config).to(text_classifier.config.device)
                 MLM.bert = base_model
         except Exception as e:
             self.device = auto_cuda()
@@ -1360,11 +1365,11 @@ class TADBoostAug:
             if hasattr(TADTextClassifier, 'MLM') and hasattr(TADTextClassifier, 'tokenizer'):
                 self.MLM, self.tokenizer = self.tad_classifier.MLM, self.tad_classifier.tokenizer
             else:
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.config)
         if not hasattr(self, 'tad_classifier'):
             try:
                 self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(arg, cal_perplexity=cal_perplexity, auto_device=self.device)
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.config)
             except:
                 keys = ['checkpoint', 'mono_boost', 'deberta', arg]
 
@@ -1377,7 +1382,7 @@ class TADBoostAug:
                 if not checkpoint_path:
                     raise ValueError('No trained ckpt found for augmentor initialization, please run augmentation on the target dataset to obtain a ckpt. e.g., BoostAug or MonoAug')
                 self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, cal_perplexity=cal_perplexity, auto_device=self.device)
-                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.opt)
+                self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, self.tad_classifier.config)
 
     def single_augment(self, text, label, num=3):
 
@@ -1438,13 +1443,13 @@ class TADBoostAug:
         tad_config_english.dropout = 0
         tad_config_english.model = TADBERT
         tad_config_english.pretrained_bert = 'microsoft/deberta-v3-base'
-        tad_config_english.optimizer = 'adamw'
+        tad_config_english.configimizer = 'adamw'
         tad_config_english.cache_dataset = False
         tad_config_english.patience = 10
         tad_config_english.log_step = -1
         tad_config_english.learning_rate = 1e-5
         tad_config_english.batadh_size = 16
-        tad_config_english.num_epoch = 10
+        tad_config_english.num_epoch = 5
         tad_config_english.evaluate_begin = 0
         tad_config_english.l2reg = 1e-8
         tad_config_english.cross_validate_fold = -1  # disable cross_validate
@@ -1454,7 +1459,7 @@ class TADBoostAug:
     def tad_classic_augment(self, config: ConfigManager,
                             dataset: DatasetItem,
                             rewrite_cache=True,
-                            task='text_defense',
+                            task='tad',
                             train_after_aug=False
                             ):
         if not isinstance(dataset, DatasetItem):
@@ -1509,15 +1514,15 @@ class TADBoostAug:
 
         if train_after_aug:
             print(colored('Start classic augment training...', 'cyan'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           ).load_trained_model()
+            return TADTrainer(config=config,
+                              dataset=dataset,  # train set and test set will be automatically detected
+                              auto_device=self.device  # automatic choose CUDA or CPU
+                              ).load_trained_model()
 
     def tad_boost_augment(self, config: ConfigManager,
                           dataset: DatasetItem,
                           rewrite_cache=True,
-                          task='text_defense',
+                          task='tad',
                           train_after_aug=False
                           ):
         if not isinstance(dataset, DatasetItem):
@@ -1572,13 +1577,13 @@ class TADBoostAug:
 
             keys = ['checkpoint', 'cross_boost', dataset.dataset_name, 'deberta', 'No.{}'.format(b_idx + 1)]
 
-            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
-                Trainer(config=_config,
-                        dataset=dataset,  # train set and test set will be automatically detected
-                        checkpoint_save_mode=1,
-                        path_to_save='checkpoints/cross_boost/{}/No.{}'.format(tag, b_idx + 1),
-                        auto_device=self.device  # automatic choose CUDA or CPU
-                        )
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM:
+                TADTrainer(config=_config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=1,
+                           path_to_save='checkpoints/cross_boost/{}/No.{}'.format(tag, b_idx + 1),
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -1618,7 +1623,7 @@ class TADBoostAug:
                             raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
                         except:
                             try:
-                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                                raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE)
                             except:
                                 raw_augs = []
 
@@ -1684,16 +1689,16 @@ class TADBoostAug:
 
         if train_after_aug:
             print(colored('Start cross boosting augment...', 'green'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=1,  # =None to avoid save model
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           )
+            return TADTrainer(config=config,
+                              dataset=dataset,  # train set and test set will be automatically detected
+                              checkpoint_save_mode=1,  # =None to avoid save model
+                              auto_device=self.device  # automatic choose CUDA or CPU
+                              )
 
     def tad_mono_augment(self, config: ConfigManager,
                          dataset: DatasetItem,
                          rewrite_cache=True,
-                         task='text_defense',
+                         task='tad',
                          train_after_aug=False
                          ):
         if not isinstance(dataset, DatasetItem):
@@ -1711,14 +1716,14 @@ class TADBoostAug:
 
             keys = ['checkpoint', 'mono_boost', dataset.dataset_name, 'deberta']
 
-            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM + 1:
+            if len(find_dirs(self.ROOT, keys)) < self.CLASSIFIER_TRAINING_NUM:
                 # _config.log_step = -1
-                Trainer(config=_config,
-                        dataset=dataset,  # train set and test set will be automatically detected
-                        checkpoint_save_mode=1,
-                        path_to_save='checkpoints/mono_boost/{}/'.format(tag),
-                        auto_device=self.device  # automatic choose CUDA or CPU
-                        )
+                TADTrainer(config=_config,
+                           dataset=dataset,  # train set and test set will be automatically detected
+                           checkpoint_save_mode=1,
+                           path_to_save='checkpoints/mono_boost/{}/'.format(tag),
+                           auto_device=self.device  # automatic choose CUDA or CPU
+                           )
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -1732,7 +1737,7 @@ class TADBoostAug:
 
             self.tad_classifier = TADCheckpointManager.get_tad_text_classifier(checkpoint_path, auto_device=self.device)
 
-            self.tad_classifier.opt.eval_batch_size = 128
+            self.tad_classifier.config.eval_batch_size = 128
 
             self.MLM, self.tokenizer = self.get_mlm_and_tokenizer(self.tad_classifier, _config)
 
@@ -1760,7 +1765,7 @@ class TADBoostAug:
                             raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE, num_thread=os.cpu_count())
                         except:
                             try:
-                                raw_augs = self.augmenter.augment(lines[i], n=5)
+                                raw_augs = self.augmenter.augment(lines[i], n=self.AUGMENT_NUM_PER_CASE)
                             except:
                                 raw_augs = []
 
@@ -1814,11 +1819,11 @@ class TADBoostAug:
 
         if train_after_aug:
             print(colored('Start mono boosting augment...', 'yellow'))
-            return Trainer(config=config,
-                           dataset=dataset,  # train set and test set will be automatically detected
-                           checkpoint_save_mode=1,  # =None to avoid save model
-                           auto_device=self.device  # automatic choose CUDA or CPU
-                           )
+            return TADTrainer(config=config,
+                              dataset=dataset,  # train set and test set will be automatically detected
+                              checkpoint_save_mode=1,  # =None to avoid save model
+                              auto_device=self.device  # automatic choose CUDA or CPU
+                              )
 
 
 def query_dataset_detail(dataset_name, task='text_classification'):
@@ -1864,7 +1869,7 @@ def post_clean(dataset_path):
 def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
     # # download from local ABSADatasets
     if not os.path.exists('integrated_datasets') and not os.path.exists('source_datasets.backup'):
-        download_datasets_from_github(os.getcwd())
+        download_all_available_datasets()
     if os.path.exists('integrated_datasets') and not os.path.exists('source_datasets.backup'):
         os.rename('integrated_datasets', 'source_datasets.backup')
 
@@ -1901,7 +1906,7 @@ def detect_dataset(dataset_path, task='apc'):
         dataset_path = DatasetItem(dataset_path)
     dataset_file = {'train': [], 'test': [], 'valid': []}
     for d in dataset_path:
-        if not os.path.exists(d) or hasattr(ABSADatasetList, d) or hasattr(TCDatasetList, d):
+        if not os.path.exists(d) or hasattr(APCDatasetList, d) or hasattr(TCDatasetList, d):
             print('Loading {} dataset'.format(d))
             search_path = find_dir(os.getcwd(), ['integrated_datasets', d, task, 'dataset'], exclude_key=['infer', 'test.'] + filter_key_words, disable_alert=False)
             dataset_file['train'] += find_files(search_path, ['integrated_datasets', d, 'train', task], exclude_key=['.inference', 'test.'] + filter_key_words)
