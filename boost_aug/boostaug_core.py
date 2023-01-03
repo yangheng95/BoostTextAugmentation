@@ -238,6 +238,7 @@ class ABSCBoostAug:
         config.AUGMENT_PCT = self.AUGMENT_PCT
         config.AUGMENT_TOOL = self.AUGMENT_BACKEND
         config.BoostAugVersion = __version__
+        config.data_num = config.get('data_num', len(self.data))
 
         apc_config_english = APCConfigManager.get_apc_config_english()
         apc_config_english.cache_dataset = False
@@ -858,6 +859,8 @@ class TCBoostAug:
         config.AUGMENT_PCT = self.AUGMENT_PCT
         config.AUGMENT_TOOL = self.AUGMENT_BACKEND
         config.BoostAugVersion = __version__
+        config.data_num = config.get('data_num', len(self.data))
+
         tc_config_english = TCConfigManager.get_tc_config_english()
         tc_config_english.max_seq_len = 80
         tc_config_english.dropout = 0
@@ -1438,6 +1441,8 @@ class TADBoostAug:
         config.AUGMENT_PCT = self.AUGMENT_PCT
         config.AUGMENT_TOOL = self.AUGMENT_BACKEND
         config.BoostAugVersion = __version__
+        config.data_num = config.get('data_num', len(self.data))
+
         tad_config_english = TADConfigManager.get_tad_config_english()
         tad_config_english.max_seq_len = 80
         tad_config_english.dropout = 0
