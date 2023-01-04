@@ -373,10 +373,12 @@ class ABSCBoostAug:
 
         for fold_id, b_idx in enumerate(range(len(folds))):
             print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
-            # f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
-            # if f:
-            #     rename(f, f.replace('.ignore', ''))
-            #     continue
+
+            if os.path.exists('{}/{}.cross_boost.{}.train.augment'.format(os.path.dirname(dataset_file), fold_id, tag)):
+                print("Already augmented, skipped")
+                continue
+            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
+
             train_data = list(itertools.chain(*[x for i, x in enumerate(folds) if i != b_idx]))
             valid_data = folds[b_idx]
 
@@ -428,6 +430,7 @@ class ABSCBoostAug:
             confidence_list = []
 
             for boost_set in boost_sets:
+
                 if self.AUGMENT_NUM_PER_CASE <= 0:
                     continue
                 print('Augmenting -> {}'.format(boost_set))
@@ -501,8 +504,6 @@ class ABSCBoostAug:
                             # aug_dict[results['ref_sentiment'][0]] = d
             print('Avg Confidence: {} Max Confidence: {} Min Confidence: {}'.format(np.average(confidence_list), max(confidence_list), min(confidence_list)))
             print('Avg Perplexity: {} Max Perplexity: {} Min Perplexity: {}'.format(np.average(perplexity_list), max(perplexity_list), min(perplexity_list)))
-
-            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
             #
             # min_num = min([len(d) for d in aug_dict.values()])
             # for key, value in aug_dict.items():
@@ -817,7 +818,7 @@ class TCBoostAug:
         for text in raw_augs:
             with torch.no_grad():
                 try:
-                    results = self.text_classifier.infer(text + '!ref!{}'.format(label), print_result=False)
+                    results = self.text_classifier.infer(text + '$LABEL${}'.format(label), print_result=False)
                 except:
                     continue
                 ids = self.tokenizer(text, return_tensors="pt")
@@ -981,10 +982,12 @@ class TCBoostAug:
 
         for fold_id, b_idx in enumerate(range(len(folds))):
             print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
-            # f = find_file(self.ROOT, [tag, '{}.'.format(fold_id), dataset.name, '.augment'])
-            # if f:
-            #     rename(f, f.replace('.ignore', ''))
-            #     continue
+
+            if os.path.exists('{}/{}.cross_boost.{}.train.augment'.format(os.path.dirname(dataset_file), fold_id, tag)):
+                print("Already augmented, skipped")
+                continue
+            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
+
             train_data = list(itertools.chain(*[x for i, x in enumerate(folds) if i != b_idx]))
             valid_data = folds[b_idx]
 
@@ -1010,6 +1013,11 @@ class TCBoostAug:
                           path_to_save='checkpoints/cross_boost/{}/No.{}'.format(tag, b_idx + 1),
                           auto_device=self.device  # automatic choose CUDA or CPU
                           )
+
+            if os.path.exists('{}/{}.cross_boost.{}.train.augment'.format(os.path.dirname(dataset_file), fold_id, tag)):
+                print("Already augmented, skipped")
+                continue
+            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -1061,7 +1069,7 @@ class TCBoostAug:
                         if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
                                 try:
-                                    results = self.text_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
+                                    results = self.text_classifier.infer(text.replace('PLACEHOLDER', '$LABEL$'), print_result=False)
                                 except:
                                     continue
                                 ids = self.tokenizer(text, return_tensors="pt")
@@ -1097,7 +1105,6 @@ class TCBoostAug:
 
             print('Avg Perplexity: {} Max Perplexity: {} Min Perplexity: {}'.format(np.average(perplexity_list), max(perplexity_list), min(perplexity_list)))
 
-            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
 
             for line in augmentations:
                 fout.write(line + '\n')
@@ -1203,7 +1210,7 @@ class TCBoostAug:
                         if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
                                 try:
-                                    results = self.text_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), print_result=False)
+                                    results = self.text_classifier.infer(text.replace('PLACEHOLDER', '$LABEL$'), print_result=False)
                                 except:
                                     continue
                                 ids = self.tokenizer(text, return_tensors="pt")
@@ -1400,7 +1407,7 @@ class TADBoostAug:
         for text in raw_augs:
             with torch.no_grad():
                 try:
-                    results = self.tad_classifier.infer(text + '!ref!{},-100,-100'.format(label), print_result=False, attack_defense=False)
+                    results = self.tad_classifier.infer(text + '$LABEL${},-100,-100'.format(label), print_result=False, attack_defense=False)
                 except Exception as e:
                     raise e
                 ids = self.tokenizer(text, return_tensors="pt")
@@ -1564,6 +1571,12 @@ class TADBoostAug:
 
         for fold_id, b_idx in enumerate(range(len(folds))):
             print(colored('boosting... No.{} in {} folds'.format(b_idx + 1, self.BOOSTING_FOLD), 'red'))
+
+            if os.path.exists('{}/{}.cross_boost.{}.train.augment'.format(os.path.dirname(dataset_file), fold_id, tag)):
+                print("Already augmented, skipped")
+                continue
+            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
+
             train_data = list(itertools.chain(*[x for i, x in enumerate(folds) if i != b_idx]))
             valid_data = folds[b_idx]
 
@@ -1589,6 +1602,11 @@ class TADBoostAug:
                            path_to_save='checkpoints/cross_boost/{}/No.{}'.format(tag, b_idx + 1),
                            auto_device=self.device  # automatic choose CUDA or CPU
                            )
+
+            if os.path.exists('{}/{}.cross_boost.{}.train.augment'.format(os.path.dirname(dataset_file), fold_id, tag)):
+                print("Already augmented, skipped")
+                continue
+            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
 
             torch.cuda.empty_cache()
             time.sleep(5)
@@ -1639,7 +1657,7 @@ class TADBoostAug:
                         if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
                                 try:
-                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), ignore_error=False, print_result=False)
+                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '$LABEL$'), ignore_error=False, print_result=False)
                                 except Exception as e:
                                     continue
                                 ids = self.tokenizer(text, return_tensors="pt")
@@ -1674,8 +1692,6 @@ class TADBoostAug:
             print('Avg Confidence: {} Max Confidence: {} Min Confidence: {}'.format(np.average(confidence_list), max(confidence_list), min(confidence_list)))
 
             print('Avg Perplexity: {} Max Perplexity: {} Min Perplexity: {}'.format(np.average(perplexity_list), max(perplexity_list), min(perplexity_list)))
-
-            fout = open('{}/{}.cross_boost.{}.train.augment.ignore'.format(os.path.dirname(dataset_file), fold_id, tag), encoding='utf8', mode='w')
 
             for line in augmentations:
                 fout.write(line + '\n')
@@ -1781,7 +1797,7 @@ class TADBoostAug:
                         if text.endswith('PLACEHOLDER {}'.format(label)) or text.endswith('PLACEHOLDER{}'.format(label)):
                             with torch.no_grad():
                                 try:
-                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '!ref!'), attack_defense=False, print_result=False)
+                                    results = self.tad_classifier.infer(text.replace('PLACEHOLDER', '$LABEL$'), attack_defense=False, print_result=False)
                                 except:
                                     continue
                                 ids = self.tokenizer(text, return_tensors="pt")
