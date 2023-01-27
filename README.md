@@ -6,7 +6,7 @@
 
 
 # Usage in PyABSA
-you can find examples for augmenting text classification and aspect-term sentiment classification at https://github.com/yangheng95/PyABSA/tree/v2/examples-v2/augmentation
+you can find examples for augmenting text classification and aspect-term sentiment classification at https://github.com/yangheng95/PyABSA/tree/v2/examples-v2/text_augmentation
 
 ## Notice
 
