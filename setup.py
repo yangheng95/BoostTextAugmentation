@@ -9,29 +9,31 @@ from setuptools import setup, find_packages
 
 from boost_aug import __version__, __name__
 
-extras_require = {'full': [
-    # install the following requirements depend on the backend of your choice
-    'textattack',
-    'nlpaug',
-    'tensorflow_text'
-]}
+extras_require = {
+    "full": [
+        # install the following requirements depend on the backend of your choice
+        "textattack",
+        "nlpaug",
+        "tensorflow_text",
+    ]
+}
 
 setup(
     name=__name__,
     version=__version__,
-    description='',
-    url='https://github.com/yangheng95/BoostAug',
+    description="",
+    url="https://github.com/yangheng95/BoostAug",
     # Author details
-    author='Yang Heng',
-    author_email='hy345@exeter.ac.uk',
+    author="Yang Heng",
+    author_email="hy345@exeter.ac.uk",
     python_requires=">=3.6",
     packages=find_packages(),
     include_package_data=True,
-    exclude_package_date={'': ['.gitignore']},
+    exclude_package_date={"": [".gitignore"]},
     # Choose your license
-    license='MIT',
+    license="MIT",
     install_requires=[
-        'pyabsa>=2.0.10',
+        "pyabsa>=2.0.10",
     ],
     extras_require=extras_require,
 )
