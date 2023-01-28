@@ -2571,34 +2571,29 @@ def prepare_dataset_and_clean_env(dataset, task, rewrite_cache=False):
     datasets_dir = backup_datasets_dir.replace(
         "source_datasets.backup", "integrated_datasets"
     )
-    if not os.path.exists(datasets_dir):
-        os.makedirs(datasets_dir)
-
-    if rewrite_cache:
-        print("Remove temp files (if any)")
-        for f in (
-            find_files(datasets_dir, [".augment"])
-            + find_files(datasets_dir, [".tmp"])
-            + find_files(datasets_dir, [".ignore"])
-        ):
-            # for f in find_files(datasets_dir, ['.tmp']):
-            remove(f)
-        os.system("rm {}/valid.dat.tmp".format(datasets_dir))
-        os.system("rm {}/train.dat.tmp".format(datasets_dir))
-        if find_cwd_dir(["run", dataset]):
-            shutil.rmtree(find_cwd_dir(["run", dataset]))
-
-        print("Remove Done")
-
-    for f in os.listdir(backup_datasets_dir):
-        if os.path.isfile(os.path.join(backup_datasets_dir, f)):
-            shutil.copyfile(
-                os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f)
-            )
-        elif os.path.isdir(os.path.join(backup_datasets_dir, f)):
-            shutil.copytree(
-                os.path.join(backup_datasets_dir, f), os.path.join(datasets_dir, f)
-            )
+    # if not os.path.exists(datasets_dir):
+    #     os.makedirs(datasets_dir)
+    #
+    # if rewrite_cache:
+    #     print("Remove temp files (if any)")
+    #     for f in (
+    #         find_files(datasets_dir, [".augment"])
+    #         + find_files(datasets_dir, [".tmp"])
+    #         + find_files(datasets_dir, [".ignore"])
+    #     ):
+    #         # for f in find_files(datasets_dir, ['.tmp']):
+    #         remove(f)
+    #     os.system("rm {}/valid.dat.tmp".format(datasets_dir))
+    #     os.system("rm {}/train.dat.tmp".format(datasets_dir))
+    #     if find_cwd_dir(["run", dataset]):
+    #         shutil.rmtree(find_cwd_dir(["run", dataset]))
+    #
+    #     print("Remove Done")
+    if os.path.exists(datasets_dir):
+        shutil.rmtree(datasets_dir)
+    shutil.copytree(
+        backup_datasets_dir, datasets_dir
+    )
 
 
 filter_key_words = [
