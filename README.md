@@ -4,6 +4,8 @@
 [![Downloads](https://pepy.tech/badge/boostaug/month)](https://pepy.tech/project/boostaug)
 [![Downloads](https://pepy.tech/badge/boostaug/week)](https://pepy.tech/project/boostaug)
 
+Codes for ACL2023 Findings paper: [Boosting Text Augmentation via Hybrid Instance Filtering Framework](https://aclanthology.org/2023.findings-acl.105)
+
 
 # Usage in PyABSA
 you can find examples for augmenting text classification and aspect-term sentiment classification at https://github.com/yangheng95/PyABSA/tree/v2/examples-v2/text_augmentation
@@ -41,3 +43,19 @@ pip install .
 
 This is the draft code, so do not perform cross-boosting on different dataset in the same folder, which will raise some
 Exception
+
+# Citation
+```
+@inproceedings{yang-li-2023-boosting,
+    title = "Boosting Text Augmentation via Hybrid Instance Filtering Framework",
+    author = "Yang, Heng  and
+      Li, Ke",
+    booktitle = "Findings of the Association for Computational Linguistics: ACL 2023",
+    month = jul,
+    year = "2023",
+    address = "Toronto, Canada",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2023.findings-acl.105",
+    pages = "1652--1669",
+}
+```
